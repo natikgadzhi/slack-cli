@@ -28,47 +28,21 @@ def _check_token(label: str, raw: str, expected_prefix: str) -> str:
 
 @click.command()
 def check() -> None:
-    """Verify tokens and API connectivity.
-
-    Tests xoxc and xoxd separately, then together, so you know exactly
-    which token is stale and which commands will work.
-
-    \b
-    Commands that always work (no auth):
-      set-xoxc, set-xoxd
-
-    \b
-    Commands that require xoxc + xoxd:
-      message, history, search
-    """
+    """Verify tokens and API connectivity."""
     xoxc = _check_token("xoxc", get_xoxc(), "xoxc-")
     xoxd = _check_token("xoxd", get_xoxd(), "xoxd-")
     click.echo()
 
     both = _api_call_raw("auth.test", xoxc=xoxc, xoxd=xoxd)
     if both.get("ok"):
-        click.echo(f"[OK]   xoxc + xoxd: authenticated as {both['user']} on {both['team']}")
-        both_valid = True
+        click.echo(f"[OK]   authenticated as {both['user']} on {both['team']}")
     else:
-        click.echo(f"[FAIL] xoxc + xoxd: {both.get('error')}")
-        # Also try with URL-decoded xoxd in case it was stored encoded
+        click.echo(f"[FAIL] {both.get('error')}")
         xoxd_decoded = unquote(xoxd)
         if xoxd_decoded != xoxd:
             both_decoded = _api_call_raw("auth.test", xoxc=xoxc, xoxd=xoxd_decoded)
             if both_decoded.get("ok"):
-                click.echo(f"[OK]   xoxc + xoxd (url-decoded): authenticated as {both_decoded['user']} on {both_decoded['team']}")
-                click.echo("[HINT] Your xoxd was stored URL-encoded. Re-save it decoded: slack set-xoxd <decoded-value>")
-                both_valid = True
+                click.echo(f"[OK]   authenticated (url-decoded xoxd) as {both_decoded['user']} on {both_decoded['team']}")
+                click.echo("[HINT] xoxd was stored URL-encoded — re-save the decoded value: slack auth set-xoxd <value>")
             else:
-                click.echo(f"[FAIL] xoxc + xoxd (url-decoded): {both_decoded.get('error')}")
-                both_valid = False
-        else:
-            both_valid = False
-
-    click.echo()
-    click.echo("Commands:")
-    click.echo("  [OK]   set-xoxc, set-xoxd, check  (no auth required)")
-    if both_valid:
-        click.echo("  [OK]   message, history, search  (xoxc + xoxd: working)")
-    else:
-        click.echo("  [FAIL] message, history, search  (tokens expired — run: slack set-xoxc <token> && slack set-xoxd <cookie>)")
+                click.echo(f"[FAIL] also failed with url-decoded xoxd: {both_decoded.get('error')}")

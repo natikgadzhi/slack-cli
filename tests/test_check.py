@@ -31,8 +31,6 @@ def test_check_success():
     assert result.exit_code == 0
     assert "[OK]" in result.output
     assert "authenticated as natik on Lambda" in result.output
-    assert "message, history, search" in result.output
-    assert "[OK]" in result.output
 
 
 def test_check_auth_failure():
@@ -45,7 +43,6 @@ def test_check_auth_failure():
         result = runner.invoke(check)
 
     assert "[FAIL]" in result.output
-    assert "tokens expired" in result.output
 
 
 def test_check_warns_on_unexpected_xoxc_prefix():
@@ -114,4 +111,4 @@ def test_check_urldecoded_xoxd_fallback_also_fails():
     ):
         result = runner.invoke(check)
 
-    assert "tokens expired" in result.output
+    assert "[FAIL]" in result.output

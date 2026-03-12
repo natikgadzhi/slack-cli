@@ -8,7 +8,14 @@ from slack_cli.formatting import print_json
 @click.argument("query")
 @click.option("--count", metavar="N", default=20, show_default=True, help="Max results to return")
 def search(query: str, count: int) -> None:
-    """Search messages across the workspace."""
+    """Search messages across the workspace.
+
+    \b
+    Examples:
+      slack search "deployment failed"
+      slack search "from:natik incident" --count 50
+      slack search "in:incidents on-call"
+    """
     resp = api_call("search.messages", query=query, count=count)
     matches = resp.get("messages", {}).get("matches", [])
     results = [

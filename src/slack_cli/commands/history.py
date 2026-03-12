@@ -12,7 +12,17 @@ from slack_cli.users import resolve_users
 @click.option("--until", metavar="TIME", default=None, help="Latest message time (same formats as --since); defaults to now")
 @click.option("--limit", metavar="N", default=50, show_default=True, help="Max messages to return")
 def history(channel: str, since: str | None, until: str | None, limit: int) -> None:
-    """Fetch channel message history."""
+    """Fetch channel message history.
+
+    CHANNEL can be a channel name (e.g. general) or ID (e.g. C12345678).
+    Prefix with # is accepted and ignored.
+
+    \b
+    Examples:
+      slack history general --since 2d
+      slack history '#incidents' --since 2026-03-01 --until 2026-03-10 --limit 100
+      slack history C12345678 --since 3h
+    """
     channel_id = resolve_channel(channel)
     oldest = parse_time(since) if since else None
     latest = parse_time(until) if until else None

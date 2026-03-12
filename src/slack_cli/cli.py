@@ -1,6 +1,6 @@
 import click
 
-from slack_cli.commands import check, history, message, search, set_xoxc, set_xoxd
+from slack_cli.commands import auth, history, message, search
 
 
 @click.group()
@@ -12,9 +12,7 @@ def cli() -> None:
     """
 
 
-cli.add_command(check)
-cli.add_command(set_xoxc)
-cli.add_command(set_xoxd)
+cli.add_command(auth)
 cli.add_command(message)
 cli.add_command(history)
 cli.add_command(search)
