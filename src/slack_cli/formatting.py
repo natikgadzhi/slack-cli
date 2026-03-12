@@ -115,5 +115,12 @@ def format_message(msg: dict) -> dict:
     return out
 
 
+def build_permalink(team_url: str, channel_id: str, ts: str) -> str:
+    """Construct a Slack message permalink from team URL, channel ID, and message timestamp."""
+    ts_compact = ts.replace(".", "")
+    base = team_url.rstrip("/")
+    return f"{base}/archives/{channel_id}/p{ts_compact}"
+
+
 def print_json(data) -> None:
     click.echo(json.dumps(data, indent=2, ensure_ascii=False))

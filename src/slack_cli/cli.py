@@ -1,6 +1,6 @@
 import click
 
-from slack_cli.commands import auth, history, message, search
+from slack_cli.commands import auth, channel, message, search
 
 
 @click.group()
@@ -14,7 +14,7 @@ def cli() -> None:
 
 cli.add_command(auth)
 cli.add_command(message)
-cli.add_command(history)
+cli.add_command(channel)
 cli.add_command(search)
 
 

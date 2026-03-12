@@ -4,7 +4,7 @@ from unittest.mock import patch
 import click
 import pytest
 
-from slack_cli.formatting import format_message, parse_slack_url, parse_time
+from slack_cli.formatting import build_permalink, format_message, parse_slack_url, parse_time
 
 
 # ── parse_slack_url ───────────────────────────────────────────────────────────
@@ -142,3 +142,21 @@ def test_format_message_missing_ts():
     result = format_message({"text": "hello"})
     assert "ts" not in result
     assert "time" not in result
+
+
+# ── build_permalink ───────────────────────────────────────────────────────────
+
+
+def test_build_permalink_basic():
+    url = build_permalink("https://myteam.slack.com", "C12345678", "1741234567.123456")
+    assert url == "https://myteam.slack.com/archives/C12345678/p1741234567123456"
+
+
+def test_build_permalink_strips_trailing_slash():
+    url = build_permalink("https://myteam.slack.com/", "C12345678", "1741234567.123456")
+    assert url == "https://myteam.slack.com/archives/C12345678/p1741234567123456"
+
+
+def test_build_permalink_ts_without_dot():
+    url = build_permalink("https://myteam.slack.com", "C12345678", "1741234567000000")
+    assert url == "https://myteam.slack.com/archives/C12345678/p1741234567000000"

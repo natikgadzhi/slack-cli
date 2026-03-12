@@ -34,3 +34,26 @@ def _api_call_raw(endpoint: str, xoxc: str, xoxd: str, **params) -> dict:
 
 def api_call(endpoint: str, **params) -> dict:
     return _api_call_raw(endpoint, xoxc=get_xoxc(), xoxd=get_xoxd(), **params)
+
+
+_team_url_cache: str | None = None
+
+
+def get_team_url() -> str:
+    """Return the workspace base URL (e.g. https://myteam.slack.com).
+
+    Checks SLACK_TEAM_URL env var first, then fetches from auth.test.
+    """
+    import os
+
+    global _team_url_cache
+    if _team_url_cache:
+        return _team_url_cache
+
+    if url := os.environ.get("SLACK_TEAM_URL"):
+        _team_url_cache = url.rstrip("/")
+        return _team_url_cache
+
+    data = api_call("auth.test")
+    _team_url_cache = data.get("url", "").rstrip("/")
+    return _team_url_cache
