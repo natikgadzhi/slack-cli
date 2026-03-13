@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [project.scripts]
-slack = "slack_cli.cli:main"
+slack-cli = "slack_cli.cli:main"
 
 [build-system]
 requires = ["hatchling"]
