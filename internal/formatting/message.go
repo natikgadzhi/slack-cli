@@ -2,7 +2,6 @@ package formatting
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -49,8 +48,8 @@ func FormatMessage(raw map[string]any) Message {
 	if text, ok := raw["text"].(string); ok {
 		text = strings.TrimSpace(text)
 		if text != "" {
-			if len(text) > 500 {
-				text = text[:500]
+			if runes := []rune(text); len(runes) > 500 {
+				text = string(runes[:500])
 			}
 			msg.Text = text
 		}
@@ -103,8 +102,8 @@ func buildAttachment(att map[string]any) *Attachment {
 		text = fb
 	}
 	text = strings.TrimSpace(text)
-	if len(text) > 300 {
-		text = text[:300]
+	if runes := []rune(text); len(runes) > 300 {
+		text = string(runes[:300])
 	}
 	if text != "" {
 		a.Text = text
@@ -135,17 +134,16 @@ func buildAttachment(att map[string]any) *Attachment {
 	return a
 }
 
-// actionURL searches the attachment's actions for one whose text matches keyword (case-insensitive).
+// actionURL searches the attachment's actions for one whose text contains keyword (case-insensitive).
 func actionURL(att map[string]any, keyword string) string {
 	actions, ok := att["actions"].([]any)
 	if !ok {
 		return ""
 	}
-	re := regexp.MustCompile("(?i)" + keyword)
 	for _, a := range actions {
 		if am, ok := a.(map[string]any); ok {
 			text, _ := am["text"].(string)
-			if re.MatchString(text) {
+			if strings.Contains(strings.ToLower(text), keyword) {
 				if u, ok := am["url"].(string); ok {
 					return u
 				}

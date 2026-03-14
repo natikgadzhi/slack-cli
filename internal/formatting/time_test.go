@@ -1,56 +1,34 @@
 package formatting
 
 import (
-	"math"
 	"testing"
 	"time"
 )
 
-func TestParseTime_Minutes(t *testing.T) {
-	now := time.Now().UTC()
-	result, err := ParseTimeWithNow("30m", now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := float64(now.Add(-30 * time.Minute).Unix())
-	if math.Abs(result-expected) > 2 {
-		t.Errorf("result = %f, want ~%f", result, expected)
-	}
-}
+func TestParseTime_Relative(t *testing.T) {
+	now := time.Date(2026, 3, 14, 12, 0, 0, 0, time.UTC)
 
-func TestParseTime_Hours(t *testing.T) {
-	now := time.Now().UTC()
-	result, err := ParseTimeWithNow("3h", now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name     string
+		input    string
+		expected float64
+	}{
+		{"30 minutes", "30m", float64(now.Add(-30 * time.Minute).Unix())},
+		{"3 hours", "3h", float64(now.Add(-3 * time.Hour).Unix())},
+		{"2 days", "2d", float64(now.Add(-2 * 24 * time.Hour).Unix())},
+		{"1 week", "1w", float64(now.Add(-7 * 24 * time.Hour).Unix())},
 	}
-	expected := float64(now.Add(-3 * time.Hour).Unix())
-	if math.Abs(result-expected) > 2 {
-		t.Errorf("result = %f, want ~%f", result, expected)
-	}
-}
 
-func TestParseTime_Days(t *testing.T) {
-	now := time.Now().UTC()
-	result, err := ParseTimeWithNow("2d", now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := float64(now.Add(-2 * 24 * time.Hour).Unix())
-	if math.Abs(result-expected) > 2 {
-		t.Errorf("result = %f, want ~%f", result, expected)
-	}
-}
-
-func TestParseTime_Weeks(t *testing.T) {
-	now := time.Now().UTC()
-	result, err := ParseTimeWithNow("1w", now)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expected := float64(now.Add(-7 * 24 * time.Hour).Unix())
-	if math.Abs(result-expected) > 2 {
-		t.Errorf("result = %f, want ~%f", result, expected)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseTimeWithNow(tt.input, now)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("result = %f, want %f", result, tt.expected)
+			}
+		})
 	}
 }
 

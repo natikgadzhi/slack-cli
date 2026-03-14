@@ -31,8 +31,27 @@ func TestFormatMessage_TruncatesLongText(t *testing.T) {
 		"ts":   "1741234567.000000",
 		"text": longText,
 	})
-	if len(msg.Text) != 500 {
-		t.Errorf("len(Text) = %d, want 500", len(msg.Text))
+	if len([]rune(msg.Text)) != 500 {
+		t.Errorf("len(runes(Text)) = %d, want 500", len([]rune(msg.Text)))
+	}
+}
+
+func TestFormatMessage_TruncatesMultibyteText(t *testing.T) {
+	// Use a multi-byte character (3 bytes in UTF-8) repeated beyond the limit.
+	longText := strings.Repeat("\u4e16", 600) // 600 runes, each 3 bytes
+	msg := FormatMessage(map[string]any{
+		"ts":   "1741234567.000000",
+		"text": longText,
+	})
+	if len([]rune(msg.Text)) != 500 {
+		t.Errorf("len(runes(Text)) = %d, want 500", len([]rune(msg.Text)))
+	}
+	// Ensure no broken UTF-8 sequences.
+	for i, r := range msg.Text {
+		if r == '\uFFFD' {
+			t.Errorf("replacement character at byte %d — truncation broke a rune", i)
+			break
+		}
 	}
 }
 
