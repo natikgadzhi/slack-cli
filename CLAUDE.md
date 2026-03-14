@@ -4,7 +4,7 @@
 
 ## How It Works
 
-1. The user edits `PROJECT_PROMPT.md` or `README.md` or other documentation with their project description
+1. The user edits `PROJECT_PROMPT.md` or `README.md` with their project description
 2. The lead agent (you, when running in the root of this repo) reads it
 3. You decompose the project into a phased task plan
 4. You spawn worker agents via the `Agent` tool to execute tasks in parallel
