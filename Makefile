@@ -1,24 +1,23 @@
-.PHONY: install uninstall reinstall test lint format typecheck sync
+.PHONY: build test vet lint e2e clean
 
-install:
-	uv tool install --editable .
+BINARY_NAME := slack-cli
+BUILD_DIR := .
 
-uninstall:
-	uv tool uninstall slack-cli
-
-reinstall: uninstall install
-
-sync:
-	uv sync
+build:
+	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/slack-cli
 
 test:
-	uv run pytest tests/ -v
+	go test ./...
+
+vet:
+	go vet ./...
 
 lint:
-	uv run ruff check src/ tests/
+	golangci-lint run ./...
 
-format:
-	uv run ruff format src/ tests/
+e2e:
+	@echo "No e2e tests yet"
 
-typecheck:
-	uv run pyright src/
+clean:
+	rm -f $(BUILD_DIR)/$(BINARY_NAME)
+	rm -rf dist/
