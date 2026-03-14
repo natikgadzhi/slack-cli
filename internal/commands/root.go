@@ -21,6 +21,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&OutputFormat, "output", "o", "json", "output format (json|markdown)")
 	rootCmd.PersistentFlags().BoolVar(&NoCache, "no-cache", false, "disable cache")
+	rootCmd.SilenceErrors = true
 }
 
 // Execute runs the root command. Call this from main().
