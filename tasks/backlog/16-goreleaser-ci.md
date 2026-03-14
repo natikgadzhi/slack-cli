@@ -1,4 +1,4 @@
-# Task 16: GoReleaser + GitHub Actions CI
+# Task 16: GoReleaser + Release Workflow
 
 **Phase**: 4 — Polish
 **Blocked by**: #14
@@ -6,18 +6,9 @@
 
 ## Objective
 
-Set up automated CI and release pipeline so the project builds, tests, and releases binaries on tag push.
+Set up GoReleaser and a GitHub Actions release workflow so the project builds and publishes binaries on tag push.
 
-## CI workflow (`.github/workflows/ci.yml`)
-
-Triggers: push to main, pull requests
-
-Jobs:
-- [ ] `build`: `go build ./...`
-- [ ] `vet`: `go vet ./...`
-- [ ] `test`: `go test -race ./...`
-- [ ] `lint`: `golangci-lint run`
-- [ ] Matrix: Go latest stable, on ubuntu-latest
+Basic CI (build, vet, test) is already handled by Task #19.
 
 ## Release workflow (`.github/workflows/release.yml`)
 
@@ -36,16 +27,21 @@ Jobs:
 - [ ] Checksum file
 - [ ] Homebrew tap integration (auto-update formula in `natikgadzhi/taps`)
 
+## CI enhancements
+
+When this task lands, also add to the existing CI workflow (`.github/workflows/ci.yml`):
+- [ ] `golangci-lint run` step
+- [ ] `goreleaser build --snapshot` step to verify release config on PRs
+
 ## Acceptance criteria
 
-- [ ] CI workflow runs on PR and push to main
 - [ ] Release workflow runs on tag push
 - [ ] `.goreleaser.yml` builds correct targets
 - [ ] `goreleaser check` passes locally
 - [ ] Binaries are statically linked (no runtime dependencies)
+- [ ] golangci-lint added to CI
 
 ## Notes
 
 - GoReleaser has built-in Homebrew tap support — configure it here, Task #17 creates the tap repo
 - Use `goreleaser/goreleaser-action@v5` in GitHub Actions
-- Consider adding a `goreleaser build --snapshot` step in CI to verify the config
