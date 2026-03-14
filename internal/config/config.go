@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -43,26 +44,37 @@ func KeychainXoxdService() string {
 	return "slack-xoxd-token"
 }
 
-// dataDir returns the base data directory for slack-cli.
-// Defaults to ~/.local/share/slack-cli.
-func dataDir() string {
+// DataDir returns the base data directory for slack-cli.
+// Override with the SLACK_DATA_DIR environment variable.
+// Defaults to ~/.local/share/slack-cli/.
+func DataDir() (string, error) {
+	if v := os.Getenv("SLACK_DATA_DIR"); v != "" {
+		return v, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		home = "."
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "slack-cli")
+	return filepath.Join(home, ".local", "share", "slack-cli"), nil
+}
+
+// CacheDir returns the path to the cache directory.
+// This is intentionally the same as DataDir — slack-cli uses a single
+// directory for both data and cache. Kept as a separate function so
+// downstream consumers can call CacheDir() without knowing the layout.
+func CacheDir() (string, error) {
+	return DataDir()
 }
 
 // UserCachePath returns the path to the user cache JSON file.
 // Override with the SLACK_USER_CACHE environment variable.
-func UserCachePath() string {
+func UserCachePath() (string, error) {
 	if v := os.Getenv("SLACK_USER_CACHE"); v != "" {
-		return v
+		return v, nil
 	}
-	return filepath.Join(dataDir(), "users.json")
-}
-
-// CacheDir returns the path to the general cache directory.
-func CacheDir() string {
-	return filepath.Join(dataDir(), "cache")
+	dir, err := DataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "users.json"), nil
 }
