@@ -4,7 +4,7 @@
 
 ## How It Works
 
-1. The user edits `PROJECT_PROMPT.md` or `README.md` with their project description
+1. The user edits `PROJECT_PROMPT.md` or `README.md` or other documentation with their project description
 2. The lead agent (you, when running in the root of this repo) reads it
 3. You decompose the project into a phased task plan
 4. You spawn worker agents via the `Agent` tool to execute tasks in parallel
@@ -34,9 +34,13 @@ When the user says **"build"**, **"go"**, **"start"**, or **"launch"**:
    - Generally prefer reviewers to have larger context and bigger models.
    - Keep the main checkout on `main` branch and `git pull --ff` after each task is completed and merged.
 5. **Assign tasks** to idle workers as they become available
-6. **Monitor progress** — poll `TaskList`/`TaskGet` to track worker progress; spawn the next worker when one completes
-7. **Handle conflicts** — if workers produce conflicting changes, resolve them
-8. **Shut down** when all tasks are complete
+6. **Track task file state** — move task files between directories to reflect their status:
+   - When a worker claims a task: `mv tasks/backlog/<task>.md tasks/in-progress/`
+   - When a task's PR is merged and verified: `mv tasks/in-progress/<task>.md tasks/done/`
+   - This keeps the file system in sync with actual task status at all times
+7. **Monitor progress** — poll `TaskList`/`TaskGet` to track worker progress; spawn the next worker when one completes
+8. **Handle conflicts** — if workers produce conflicting changes, resolve them
+9. **Shut down** when all tasks are complete
 
 ## Worker Agent Instructions
 
