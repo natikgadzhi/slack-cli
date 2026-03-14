@@ -129,6 +129,24 @@ Reviewers are spawned by the lead with the PR number and task ID in their prompt
 - One logical change per commit — don't bundle unrelated work
 - Workers should `git pull --rebase` before pushing to avoid conflicts
 
+## Task File System
+
+Tasks are stored as markdown files in `tasks/` with three subdirectories representing status:
+
+```
+tasks/
+├── backlog/      # Not yet started
+├── in-progress/  # Currently being worked on
+└── done/         # Completed and merged
+```
+
+- Each task is a numbered markdown file (e.g. `01-bootstrap-go-project.md`)
+- The lead agent creates task files in `backlog/` during planning
+- Workers move their task file to `in-progress/` when they start work
+- Workers move their task file to `done/` after the PR is merged and the task is complete
+- Task files contain the full specification: objective, acceptance criteria, dependencies, and notes
+- Moving task files between directories should be committed as part of the worker's branch
+
 ## Important Rules
 
 - **Never modify PROJECT_PROMPT.md** — that's the user's spec
