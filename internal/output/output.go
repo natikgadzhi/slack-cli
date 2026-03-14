@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 )
@@ -94,6 +96,7 @@ func renderMessagesMarkdown(w io.Writer, messages []formatting.Message) error {
 // renderMessageMarkdown writes a single message in Markdown format.
 func renderMessageMarkdown(w io.Writer, msg formatting.Message) error {
 	// Header line: ## time — @user
+	// Guard: if both Time and User are empty, use a fallback.
 	header := "##"
 	if msg.Time != "" {
 		header += " " + msg.Time
@@ -103,6 +106,9 @@ func renderMessageMarkdown(w io.Writer, msg formatting.Message) error {
 			header += " —"
 		}
 		header += " @" + msg.User
+	}
+	if msg.Time == "" && msg.User == "" {
+		header += " (no timestamp)"
 	}
 	if _, err := fmt.Fprintln(w, header); err != nil {
 		return err
@@ -121,15 +127,15 @@ func renderMessageMarkdown(w io.Writer, msg formatting.Message) error {
 		}
 	}
 
-	// Attachment as blockquote.
+	// Attachment as blockquote. Each line is prefixed with "> ".
 	if msg.Attachment != nil {
 		if msg.Attachment.Title != "" {
-			if _, err := fmt.Fprintf(w, "> %s\n", msg.Attachment.Title); err != nil {
+			if err := writeBlockquote(w, msg.Attachment.Title); err != nil {
 				return err
 			}
 		}
 		if msg.Attachment.Text != "" {
-			if _, err := fmt.Fprintf(w, "> %s\n", msg.Attachment.Text); err != nil {
+			if err := writeBlockquote(w, msg.Attachment.Text); err != nil {
 				return err
 			}
 		}
@@ -172,15 +178,22 @@ func renderSearchResultsMarkdown(w io.Writer, results []map[string]any) error {
 		ts, _ := r["ts"].(string)
 		channel, _ := r["channel"].(string)
 
+		// Convert raw ts to human-readable time.
+		timeStr := formatTS(ts)
+
 		header := "##"
-		if ts != "" {
-			header += " " + ts
+		if timeStr != "" {
+			header += " " + timeStr
 		}
 		if channel != "" {
 			header += " #" + channel
 		}
 		if user != "" {
 			header += " — @" + user
+		}
+		// Guard: if all fields are empty, use a fallback.
+		if timeStr == "" && channel == "" && user == "" {
+			header += " (no timestamp)"
 		}
 
 		if _, err := fmt.Fprintln(w, header); err != nil {
@@ -206,4 +219,29 @@ func renderSearchResultsMarkdown(w io.Writer, results []map[string]any) error {
 		}
 	}
 	return nil
+}
+
+// writeBlockquote writes text as a Markdown blockquote, prefixing each line with "> ".
+func writeBlockquote(w io.Writer, text string) error {
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		if _, err := fmt.Fprintf(w, "> %s\n", line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// formatTS converts a Slack ts string (e.g. "1741234567.000000") to a
+// human-readable UTC time string. Returns empty string if parsing fails.
+func formatTS(ts string) string {
+	if ts == "" {
+		return ""
+	}
+	f, err := strconv.ParseFloat(ts, 64)
+	if err != nil {
+		return ts
+	}
+	t := time.Unix(int64(f), 0).UTC()
+	return t.Format("2006-01-02 15:04 UTC")
 }

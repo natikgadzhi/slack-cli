@@ -291,6 +291,53 @@ func TestRenderSingle_Markdown_OnlyUser(t *testing.T) {
 	}
 }
 
+func TestRenderSingle_Markdown_NoTimeNoUser(t *testing.T) {
+	msg := formatting.Message{
+		Text: "orphan message",
+	}
+
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	// Should use "(no timestamp)" fallback instead of bare "##".
+	if !strings.HasPrefix(out, "## (no timestamp)\n") {
+		t.Errorf("expected fallback header, got:\n%s", out)
+	}
+	if strings.HasPrefix(out, "## \n") {
+		t.Errorf("bare '## ' header should not appear:\n%s", out)
+	}
+}
+
+func TestRenderSingle_Markdown_MultilineAttachment(t *testing.T) {
+	msg := formatting.Message{
+		Time: "2026-03-01 14:00 UTC",
+		User: "bot",
+		Text: "alert fired",
+		Attachment: &formatting.Attachment{
+			Title: "Line1 title\nLine2 title",
+			Text:  "stack line 1\nstack line 2\nstack line 3",
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	// Every line of the title should be blockquoted.
+	if !strings.Contains(out, "> Line1 title\n> Line2 title\n") {
+		t.Errorf("multiline title not fully blockquoted:\n%s", out)
+	}
+	// Every line of the text should be blockquoted.
+	if !strings.Contains(out, "> stack line 1\n> stack line 2\n> stack line 3\n") {
+		t.Errorf("multiline text not fully blockquoted:\n%s", out)
+	}
+}
+
 // ── RenderMessages ──────────────────────────────────────────────────────────
 
 func TestRenderMessages_JSON_Empty(t *testing.T) {
@@ -424,6 +471,32 @@ func TestRenderSearchResults_Markdown(t *testing.T) {
 	}
 	if !strings.Contains(out, "---") {
 		t.Errorf("missing separator between results:\n%s", out)
+	}
+	// Should render human-readable time, not raw ts.
+	if strings.Contains(out, "1741234567.000000") {
+		t.Errorf("search results should show formatted time, not raw ts:\n%s", out)
+	}
+	if !strings.Contains(out, "2025-03-06") {
+		t.Errorf("search results should show formatted date:\n%s", out)
+	}
+}
+
+func TestRenderSearchResults_Markdown_EmptyFields(t *testing.T) {
+	results := []map[string]any{
+		{"text": "orphan result"},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderSearchResults(&buf, results, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "## (no timestamp)") {
+		t.Errorf("expected fallback header for empty search result fields:\n%s", out)
+	}
+	if strings.HasPrefix(out, "## \n") {
+		t.Errorf("bare '## ' header should not appear:\n%s", out)
 	}
 }
 
