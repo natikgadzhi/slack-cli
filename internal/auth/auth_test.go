@@ -18,7 +18,8 @@ func TestGetXoxc_EnvVar(t *testing.T) {
 }
 
 func TestGetXoxc_KeychainFallback(t *testing.T) {
-	// Ensure the env var is unset.
+	// t.Setenv registers cleanup to restore the var after the test;
+	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
 	t.Setenv("SLACK_XOXC", "")
 	os.Unsetenv("SLACK_XOXC")
 
@@ -36,7 +37,8 @@ func TestGetXoxc_KeychainFallback(t *testing.T) {
 }
 
 func TestGetXoxc_KeychainError(t *testing.T) {
-	// Ensure the env var is unset.
+	// t.Setenv registers cleanup to restore the var after the test;
+	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
 	t.Setenv("SLACK_XOXC", "")
 	os.Unsetenv("SLACK_XOXC")
 
@@ -63,19 +65,20 @@ func TestGetXoxd_EnvVar(t *testing.T) {
 }
 
 func TestGetXoxd_KeychainFallback(t *testing.T) {
-	// Ensure the env var is unset.
+	// t.Setenv registers cleanup to restore the var after the test;
+	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
 	t.Setenv("SLACK_XOXD", "")
 	os.Unsetenv("SLACK_XOXD")
 
 	origExec := execCommand
 	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_success")
+	execCommand = fakeExecCommand("keychain_get_success_xoxd")
 
 	token, err := GetXoxd()
 	if err != nil {
 		t.Fatalf("GetXoxd returned unexpected error: %v", err)
 	}
-	if token != "xoxc-test-token-123" {
-		t.Errorf("GetXoxd = %q, want %q", token, "xoxc-test-token-123")
+	if token != "xoxd-test-token-123" {
+		t.Errorf("GetXoxd = %q, want %q", token, "xoxd-test-token-123")
 	}
 }

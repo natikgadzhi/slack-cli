@@ -36,8 +36,13 @@ func TestHelperProcess(t *testing.T) {
 
 	switch behavior {
 	case "keychain_get_success":
-		// Simulate `security find-generic-password ... -w` returning a token.
+		// Simulate `security find-generic-password ... -w` returning an xoxc token.
 		fmt.Fprintf(os.Stdout, "xoxc-test-token-123\n")
+		os.Exit(0)
+
+	case "keychain_get_success_xoxd":
+		// Simulate `security find-generic-password ... -w` returning an xoxd cookie.
+		fmt.Fprintf(os.Stdout, "xoxd-test-token-123\n")
 		os.Exit(0)
 
 	case "keychain_get_failure":

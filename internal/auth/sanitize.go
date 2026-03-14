@@ -4,6 +4,9 @@ import "strings"
 
 // SanitizeToken strips common copy-paste artifacts from a token string.
 // It returns the cleaned token and a list of warnings describing what was stripped.
+//
+// NOTE: This function is not yet wired into CLI commands; it will be integrated
+// when the "auth set-xoxc" / "auth set-xoxd" commands are implemented in a later task.
 func SanitizeToken(token string) (string, []string) {
 	var warnings []string
 
