@@ -3,9 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/natikgadzhi/slack-cli/internal/commands"
 )
 
 func main() {
-	fmt.Println("slack-cli")
-	os.Exit(0)
+	if err := commands.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
