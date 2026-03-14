@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -68,53 +69,74 @@ func (c *Client) Call(endpoint string, params map[string]string) (map[string]any
 }
 
 // callWithRetry performs the HTTP call and retries on 429 up to maxRetries times.
+// It uses a loop instead of recursion to avoid stacking deferred resp.Body.Close() calls.
 func (c *Client) callWithRetry(endpoint string, params map[string]string, retriesLeft int) (map[string]any, error) {
-	body := c.encodeParams(params)
 	reqURL := c.baseURL + "/" + endpoint
 
-	req, err := http.NewRequest(http.MethodPost, reqURL, strings.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("creating request for %s: %w", endpoint, err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.xoxc)
-	req.Header.Set("Cookie", "d="+c.xoxd)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
-	req.Header.Set("User-Agent", config.UserAgent)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request to %s failed: %w", endpoint, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := c.parseRetryAfter(resp.Header.Get("Retry-After"))
-		if retriesLeft <= 0 {
-			return nil, &RateLimitError{RetryAfter: retryAfter}
+	for {
+		body := c.encodeParams(params)
+		req, err := http.NewRequest(http.MethodPost, reqURL, strings.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("creating request for %s: %w", endpoint, err)
 		}
-		delay := c.backoffDelay(retryAfter, c.maxRetries-retriesLeft)
-		c.sleepFn(delay)
-		return c.callWithRetry(endpoint, params, retriesLeft-1)
-	}
+		req.Header.Set("Authorization", "Bearer "+c.xoxc)
+		req.Header.Set("Cookie", "d="+c.xoxd)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
+		req.Header.Set("User-Agent", config.UserAgent)
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response from %s: %w", endpoint, err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		excerpt := string(respBody)
-		if len(excerpt) > 300 {
-			excerpt = excerpt[:300]
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request to %s failed: %w", endpoint, err)
 		}
-		return nil, &APIError{Code: resp.StatusCode, Message: excerpt}
-	}
 
-	var result map[string]any
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("decoding response from %s: %w", endpoint, err)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retryAfter, hasHeader := c.parseRetryAfter(resp.Header.Get("Retry-After"))
+			// Drain and close the body before retrying to avoid stacking deferred closes.
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+
+			if retriesLeft <= 0 {
+				return nil, &RateLimitError{RetryAfter: retryAfter}
+			}
+			delay := c.backoffDelay(retryAfter, hasHeader, c.maxRetries-retriesLeft)
+			c.sleepFn(delay)
+			retriesLeft--
+			continue
+		}
+
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("reading response from %s: %w", endpoint, err)
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			excerpt := string(respBody)
+			if len(excerpt) > 300 {
+				excerpt = excerpt[:300]
+			}
+			return nil, &APIError{Code: resp.StatusCode, Message: excerpt}
+		}
+
+		var result map[string]any
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return nil, fmt.Errorf("decoding response from %s: %w", endpoint, err)
+		}
+
+		// Slack returns HTTP 200 with {"ok": false, "error": "..."} for
+		// auth failures, permission errors, etc. Detect this and return an APIError.
+		if ok, exists := result["ok"]; exists {
+			if okBool, isBool := ok.(bool); isBool && !okBool {
+				errMsg := "unknown error"
+				if e, has := result["error"].(string); has {
+					errMsg = e
+				}
+				return nil, &APIError{Code: resp.StatusCode, Message: errMsg}
+			}
+		}
+
+		return result, nil
 	}
-	return result, nil
 }
 
 // CallPaginated follows Slack cursor-based pagination. It collects items found
@@ -151,12 +173,13 @@ func (c *Client) CallPaginated(endpoint string, params map[string]string, cursor
 		items := extractItems(result, collectKey)
 		all = append(all, items...)
 
-		// Check for next cursor.
+		// Check for next cursor using the specified cursorKey
+		// (e.g. "next_cursor" for standard Slack pagination).
 		cursor := extractNextCursor(result, cursorKey)
 		if cursor == "" {
 			break
 		}
-		p[cursorKey] = cursor
+		p["cursor"] = cursor
 	}
 
 	return all, nil
@@ -176,9 +199,12 @@ func (c *Client) GetTeamURL() (string, error) {
 			c.teamErr = fmt.Errorf("fetching team URL: %w", err)
 			return
 		}
-		if u, ok := data["url"].(string); ok {
-			c.teamURL = strings.TrimRight(u, "/")
+		u, ok := data["url"].(string)
+		if !ok || u == "" {
+			c.teamErr = fmt.Errorf("auth.test response missing url field")
+			return
 		}
+		c.teamURL = strings.TrimRight(u, "/")
 	})
 	return c.teamURL, c.teamErr
 }
@@ -198,23 +224,24 @@ func (c *Client) encodeParams(params map[string]string) string {
 }
 
 // parseRetryAfter reads the Retry-After header value as seconds.
-// Returns 1s if the header is missing or unparseable.
-func (c *Client) parseRetryAfter(header string) time.Duration {
+// Returns the parsed duration and true if a valid header was present.
+// Returns (0, false) if the header is missing or unparseable.
+func (c *Client) parseRetryAfter(header string) (time.Duration, bool) {
 	if header == "" {
-		return time.Second
+		return 0, false
 	}
 	secs, err := strconv.Atoi(header)
 	if err != nil || secs <= 0 {
-		return time.Second
+		return 0, false
 	}
-	return time.Duration(secs) * time.Second
+	return time.Duration(secs) * time.Second, true
 }
 
-// backoffDelay returns the delay before retrying. If retryAfter is positive
-// (from the Retry-After header), it adds jitter. Otherwise it uses exponential
-// backoff with jitter.
-func (c *Client) backoffDelay(retryAfter time.Duration, attempt int) time.Duration {
-	if retryAfter > 0 {
+// backoffDelay returns the delay before retrying. If hasRetryAfter is true,
+// retryAfter contains the server-requested delay and we add jitter on top.
+// Otherwise we use exponential backoff with jitter.
+func (c *Client) backoffDelay(retryAfter time.Duration, hasRetryAfter bool, attempt int) time.Duration {
+	if hasRetryAfter {
 		// Add 0-25% jitter on top of the server-requested delay.
 		jitter := time.Duration(rand.Int64N(int64(retryAfter) / 4))
 		return retryAfter + jitter
@@ -225,9 +252,11 @@ func (c *Client) backoffDelay(retryAfter time.Duration, attempt int) time.Durati
 	return base + jitter
 }
 
-// asRateLimitError unwraps err into a *RateLimitError if possible.
+// asRateLimitError unwraps err into a *RateLimitError if possible,
+// using errors.As so it works with wrapped errors.
 func asRateLimitError(err error) (*RateLimitError, bool) {
-	if rlErr, ok := err.(*RateLimitError); ok {
+	var rlErr *RateLimitError
+	if errors.As(err, &rlErr) {
 		return rlErr, true
 	}
 	return nil, false
@@ -252,10 +281,10 @@ func extractItems(result map[string]any, collectKey string) []map[string]any {
 	return items
 }
 
-// extractNextCursor reads response_metadata.next_cursor from a Slack API response.
-// cursorKey is the parameter name used to pass the cursor back in the next request
-// (e.g. "cursor"); the response always stores it under response_metadata.next_cursor.
-func extractNextCursor(result map[string]any, _ string) string {
+// extractNextCursor reads the cursor from response_metadata in a Slack API response.
+// cursorKey specifies which field to look up inside response_metadata (e.g.
+// "next_cursor"). Most Slack endpoints use "next_cursor" by default.
+func extractNextCursor(result map[string]any, cursorKey string) string {
 	meta, ok := result["response_metadata"]
 	if !ok {
 		return ""
@@ -264,7 +293,7 @@ func extractNextCursor(result map[string]any, _ string) string {
 	if !ok {
 		return ""
 	}
-	cursor, ok := metaMap["next_cursor"].(string)
+	cursor, ok := metaMap[cursorKey].(string)
 	if !ok {
 		return ""
 	}
