@@ -13,6 +13,27 @@ We need to make several changes to this project:
 5. Implement output in JSON or Markdown, `-o json` or `-o markdown` in CLI options.
 6. Implement Markdown caching with the principles below:
 
+## Conventions
+
+### Version command
+
+Every CLI tool should have a `version` subcommand that outputs JSON:
+
+```json
+{
+  "version": "0.0.2",
+  "commit": "6b739723c64dc3d3ee5745064663e7ad69dbb078",
+  "date": "2026-03-15T03:35:31Z"
+}
+```
+
+Implementation:
+- Three build-time variables injected via ldflags: `Version`, `Commit`, `Date`
+- Defaults: `Version="dev"`, `Commit="unknown"`, `Date="unknown"`
+- GoReleaser sets them automatically via `{{.Version}}`, `{{.Commit}}`, `{{.Date}}`
+- Makefile sets `Commit` and `Date` from git/system for local builds
+- `--version` flag should also be supported (Cobra's built-in `Version` field), outputs a single line
+
 ## Guiding principles behind the rewrite
 
 - Build in typed language with good tooling (already covered, Go)

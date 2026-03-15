@@ -4,9 +4,14 @@ BINARY_NAME := slack-cli
 BUILD_DIR := .
 
 VERSION ?= dev
+COMMIT  ?= $(shell git rev-parse --short HEAD)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X github.com/natikgadzhi/slack-cli/internal/commands.Version=$(VERSION) \
+           -X github.com/natikgadzhi/slack-cli/internal/commands.Commit=$(COMMIT) \
+           -X github.com/natikgadzhi/slack-cli/internal/commands.Date=$(DATE)
 
 build:
-	go build -ldflags "-X github.com/natikgadzhi/slack-cli/internal/commands.Version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/slack-cli
+	go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/slack-cli
 
 test:
 	go test ./...

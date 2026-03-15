@@ -1,16 +1,24 @@
 package commands
 
 import (
-	"fmt"
+	"encoding/json"
+	"os"
 
 	"github.com/spf13/cobra"
 )
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version of slack-cli",
+	Short: "Print version information as JSON",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("slack-cli version %s\n", Version)
+		info := map[string]string{
+			"version": Version,
+			"commit":  Commit,
+			"date":    Date,
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(info)
 	},
 }
 
