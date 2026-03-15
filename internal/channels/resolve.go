@@ -2,7 +2,6 @@
 package channels
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -16,7 +15,8 @@ var channelIDPattern = regexp.MustCompile(`^[A-Z0-9]{8,}$`)
 // ResolveChannel resolves a channel name or ID to a Slack channel ID.
 // If nameOrID looks like a channel ID (8+ uppercase alphanumeric chars), it is
 // returned as-is. Otherwise, conversations.list is paginated to find a channel
-// whose name matches.
+// whose name matches. Pagination stops as soon as the channel is found,
+// avoiding unnecessary API calls in large workspaces.
 func ResolveChannel(client *api.Client, nameOrID string) (string, error) {
 	nameOrID = strings.TrimPrefix(nameOrID, "#")
 
@@ -34,20 +34,22 @@ func ResolveChannel(client *api.Client, nameOrID string) (string, error) {
 		"types":            "public_channel,private_channel,mpim,im",
 	}
 
-	channels, err := client.CallPaginated("conversations.list", params, "next_cursor", "channels")
-	if err != nil {
-		// On rate limit, search partial results before giving up.
-		var rlErr *api.RateLimitError
-		if errors.As(err, &rlErr) {
-			if id := findChannelByName(channels, nameOrID); id != "" {
-				return id, nil
-			}
+	for {
+		result, err := client.Call("conversations.list", params)
+		if err != nil {
+			return "", fmt.Errorf("listing channels: %w", err)
 		}
-		return "", fmt.Errorf("listing channels: %w", err)
-	}
 
-	if id := findChannelByName(channels, nameOrID); id != "" {
-		return id, nil
+		channels := api.ExtractItems(result, "channels")
+		if id := findChannelByName(channels, nameOrID); id != "" {
+			return id, nil
+		}
+
+		cursor := api.ExtractNextCursor(result, "next_cursor")
+		if cursor == "" {
+			break
+		}
+		params["cursor"] = cursor
 	}
 
 	return "", fmt.Errorf("channel not found: %q", nameOrID)

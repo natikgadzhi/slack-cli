@@ -323,10 +323,8 @@ func TestResolveChannel_RateLimitPartialResults_NotFound(t *testing.T) {
 
 func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 	// Page 1: returns the channel we're looking for, with a next cursor.
-	// Page 2 returns HTTP 429 (rate limited).
-	// CallPaginated returns partial data (page 1 results) along with a
-	// RateLimitError. ResolveChannel searches partial results, finds the
-	// channel on page 1, and returns success.
+	// Because the channel is found on page 1, the loop returns immediately
+	// without fetching page 2 — so the 429 on page 2 is never encountered.
 	page := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
@@ -351,7 +349,6 @@ func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Zero retries so the client gives up immediately on 429.
 	client := api.NewClient(
 		"xoxc-test-token", "xoxd-test-cookie",
 		api.WithBaseURL(srv.URL),
@@ -365,5 +362,50 @@ func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 	}
 	if id != "C55555555" {
 		t.Errorf("expected C55555555, got %q", id)
+	}
+	// Channel was found on page 1; page 2 must NOT have been fetched.
+	if page != 1 {
+		t.Errorf("expected exactly 1 page fetched (early termination), got %d", page)
+	}
+}
+
+func TestResolveChannel_EarlyTermination(t *testing.T) {
+	// Channel is on page 1 of a multi-page result set.
+	// The second page must never be fetched.
+	pagesFetched := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pagesFetched++
+		if pagesFetched > 1 {
+			t.Error("second page fetched: early termination did not work")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "channels": []any{}})
+			return
+		}
+		resp := map[string]any{
+			"ok": true,
+			"channels": []any{
+				map[string]any{"id": "C11111111", "name": "random"},
+				map[string]any{"id": "C22222222", "name": "general"},
+				map[string]any{"id": "C33333333", "name": "engineering"},
+			},
+			"response_metadata": map[string]any{
+				"next_cursor": "cursor-page-2",
+			},
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	id, err := ResolveChannel(client, "general")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "C22222222" {
+		t.Errorf("expected C22222222, got %q", id)
+	}
+	if pagesFetched != 1 {
+		t.Errorf("expected 1 page fetched, got %d", pagesFetched)
 	}
 }
