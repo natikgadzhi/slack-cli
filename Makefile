@@ -16,7 +16,7 @@ lint:
 	golangci-lint run ./...
 
 e2e:
-	@echo "No e2e tests yet"
+	go test -tags e2e -v ./tests/
 
 clean:
 	rm -f $(BUILD_DIR)/$(BINARY_NAME)
