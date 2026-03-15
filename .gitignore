@@ -3,5 +3,5 @@
 *.exe
 /dist/
 
-# Environment files
+# Local environment variables (for E2E tests)
 .env

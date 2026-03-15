@@ -16,7 +16,8 @@ lint:
 	golangci-lint run ./...
 
 e2e:
-	go test -tags e2e -v ./tests/
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
+	go test -tags e2e -v -timeout 120s ./tests/
 
 clean:
 	rm -f $(BUILD_DIR)/$(BINARY_NAME)
