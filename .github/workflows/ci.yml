@@ -32,7 +32,8 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          install-mode: goinstall
+          version: v1.64.8
 
       - name: GoReleaser snapshot build
         uses: goreleaser/goreleaser-action@v6
