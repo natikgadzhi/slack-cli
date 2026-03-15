@@ -77,7 +77,7 @@ func TestWriteItemFiles_CreatesCorrectStructure(t *testing.T) {
 		{TS: "1741234568.000000", Time: "2025-03-06 12:01 UTC", User: "bob", Text: "world"},
 	}
 
-	err := writeItemFiles(dir, "channels", items, "C12345678", "general")
+	err := writeItemFiles(dir, items, "C12345678", "general")
 	if err != nil {
 		t.Fatalf("writeItemFiles: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestWriteItemFiles_FileContainsFrontmatter(t *testing.T) {
 		},
 	}
 
-	err := writeItemFiles(dir, "channels", items, "C12345678", "general")
+	err := writeItemFiles(dir, items, "C12345678", "general")
 	if err != nil {
 		t.Fatalf("writeItemFiles: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestWriteItemFiles_UsesChannelIDWhenNameEmpty(t *testing.T) {
 		{TS: "1741234567.123456", Time: "2025-03-06 12:00 UTC", User: "alice", Text: "hello"},
 	}
 
-	err := writeItemFiles(dir, "channels", items, "C12345678", "")
+	err := writeItemFiles(dir, items, "C12345678", "")
 	if err != nil {
 		t.Fatalf("writeItemFiles: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestWriteItemFiles_SkipsMessagesWithoutTS(t *testing.T) {
 		{TS: "1741234567.123456", Time: "2025-03-06 12:00 UTC", User: "bob", Text: "has ts"},
 	}
 
-	err := writeItemFiles(dir, "channels", items, "C12345678", "general")
+	err := writeItemFiles(dir, items, "C12345678", "general")
 	if err != nil {
 		t.Fatalf("writeItemFiles: %v", err)
 	}

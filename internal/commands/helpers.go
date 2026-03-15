@@ -141,9 +141,10 @@ func renderMultipleMarkdown(msgs []formatting.Message) ([]byte, error) {
 }
 
 // writeItemFiles writes each message as its own markdown file with frontmatter
-// under <outputDir>/slack/<objectType>/<context>/<ts>.md.
+// under <outputDir>/slack/channels/<context>/<ts>.md.
 // The context is channelName if non-empty, otherwise channelID.
-func writeItemFiles(outputDir, objectType string, items []formatting.Message, channelID, channelName string) error {
+func writeItemFiles(outputDir string, items []formatting.Message, channelID, channelName string) error {
+	const objectType = "channels"
 	absDir, err := validateOutputDir(outputDir)
 	if err != nil {
 		return err

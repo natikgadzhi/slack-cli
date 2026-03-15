@@ -17,8 +17,8 @@ var (
 
 // rootCmd is the top-level command for the CLI.
 var rootCmd = &cobra.Command{
-	Use:   "slack-cli",
-	Short: "Slack read-only CLI",
+	Use:     "slack-cli",
+	Short:   "Slack read-only CLI",
 	Long:    "Slack read-only CLI for fetching messages, threads, and history.",
 	Version: Version,
 }
