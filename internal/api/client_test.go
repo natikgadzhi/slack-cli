@@ -490,19 +490,19 @@ func TestExtractNextCursor_UsesCustomKey(t *testing.T) {
 	}
 
 	// Should use the specified cursorKey.
-	cursor := extractNextCursor(result, "next_cursor")
+	cursor := ExtractNextCursor(result, "next_cursor")
 	if cursor != "standard-cursor" {
-		t.Errorf("extractNextCursor(next_cursor) = %q, want 'standard-cursor'", cursor)
+		t.Errorf("ExtractNextCursor(next_cursor) = %q, want 'standard-cursor'", cursor)
 	}
 
-	cursor = extractNextCursor(result, "custom_cursor")
+	cursor = ExtractNextCursor(result, "custom_cursor")
 	if cursor != "custom-cursor-value" {
-		t.Errorf("extractNextCursor(custom_cursor) = %q, want 'custom-cursor-value'", cursor)
+		t.Errorf("ExtractNextCursor(custom_cursor) = %q, want 'custom-cursor-value'", cursor)
 	}
 
 	// Missing key returns empty.
-	cursor = extractNextCursor(result, "nonexistent")
+	cursor = ExtractNextCursor(result, "nonexistent")
 	if cursor != "" {
-		t.Errorf("extractNextCursor(nonexistent) = %q, want empty", cursor)
+		t.Errorf("ExtractNextCursor(nonexistent) = %q, want empty", cursor)
 	}
 }

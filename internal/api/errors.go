@@ -3,6 +3,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -29,4 +30,13 @@ type RateLimitError struct {
 
 func (e *RateLimitError) Error() string {
 	return fmt.Sprintf("rate limited: retry after %s", e.RetryAfter)
+}
+
+// AsAPIError unwraps err into an *APIError if possible.
+func AsAPIError(err error) (*APIError, bool) {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr, true
+	}
+	return nil, false
 }
