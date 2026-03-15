@@ -543,6 +543,133 @@ func TestRenderSearchResults_UnsupportedFormat(t *testing.T) {
 
 // ── JSON pretty-printing ────────────────────────────────────────────────────
 
+func TestRenderSearchResults_Markdown_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderSearchResults(&buf, []map[string]any{}, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output for empty search results, got:\n%s", buf.String())
+	}
+}
+
+func TestRenderSearchResults_Markdown_SingleNoSeparator(t *testing.T) {
+	results := []map[string]any{
+		{"ts": "1741234567.000000", "user": "U1", "text": "only one", "channel": "general"},
+	}
+	var buf bytes.Buffer
+	if err := RenderSearchResults(&buf, results, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "---") {
+		t.Errorf("single search result should not have separator:\n%s", out)
+	}
+}
+
+func TestRenderSingle_JSON_SpecialCharacters(t *testing.T) {
+	msg := formatting.Message{
+		TS:   "1741234567.000000",
+		User: "U123",
+		Text: `He said "hello" & <world> with 'quotes' and \backslash`,
+	}
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, JSON); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Must be valid JSON.
+	var decoded formatting.Message
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput:\n%s", err, buf.String())
+	}
+	if decoded.Text != msg.Text {
+		t.Errorf("decoded.Text = %q, want %q", decoded.Text, msg.Text)
+	}
+}
+
+func TestRenderSingle_JSON_EmptyMessage(t *testing.T) {
+	msg := formatting.Message{}
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, JSON); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput:\n%s", err, buf.String())
+	}
+}
+
+func TestRenderSingle_Markdown_AllFieldsEmpty(t *testing.T) {
+	msg := formatting.Message{}
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "(no timestamp)") {
+		t.Errorf("empty message should show fallback header:\n%s", out)
+	}
+}
+
+func TestFormatTS_Empty(t *testing.T) {
+	if got := formatTS(""); got != "" {
+		t.Errorf("formatTS(\"\") = %q, want empty", got)
+	}
+}
+
+func TestFormatTS_Invalid(t *testing.T) {
+	// Non-parseable ts should be returned as-is.
+	if got := formatTS("not-a-number"); got != "not-a-number" {
+		t.Errorf("formatTS(\"not-a-number\") = %q, want \"not-a-number\"", got)
+	}
+}
+
+func TestFormatTS_Valid(t *testing.T) {
+	got := formatTS("1741234567.000000")
+	if got == "" || got == "1741234567.000000" {
+		t.Errorf("formatTS should convert to human-readable, got %q", got)
+	}
+	if !strings.Contains(got, "2025-03-06") {
+		t.Errorf("formatTS should contain date, got %q", got)
+	}
+}
+
+func TestRenderSingle_Markdown_OnlyText(t *testing.T) {
+	msg := formatting.Message{
+		Text: "only text, no user or time",
+	}
+	var buf bytes.Buffer
+	if err := RenderSingle(&buf, msg, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "only text, no user or time") {
+		t.Errorf("expected text in output:\n%s", out)
+	}
+}
+
+func TestRenderMessages_JSON_Nil(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderMessages(&buf, nil, JSON); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// nil slice should marshal as null in JSON.
+	out := strings.TrimSpace(buf.String())
+	if out != "null" {
+		t.Errorf("nil messages should marshal as null, got: %q", out)
+	}
+}
+
+func TestRenderMessages_Markdown_Nil(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderMessages(&buf, nil, Markdown); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output for nil messages, got:\n%s", buf.String())
+	}
+}
+
 func TestRenderSingle_JSON_IsPrettyPrinted(t *testing.T) {
 	msg := formatting.Message{
 		TS:   "1741234567.000000",

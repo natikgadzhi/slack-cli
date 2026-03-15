@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -479,6 +480,320 @@ func TestGetTeamURL_MissingURLField(t *testing.T) {
 	if err.Error() != "auth.test response missing url field" {
 		t.Errorf("unexpected error message: %v", err)
 	}
+}
+
+func TestCall_InvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("this is not json"))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, err := client.Call("auth.test", nil)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response")
+	}
+	if !containsAny(err.Error(), "decoding") {
+		t.Errorf("expected JSON decode error, got: %v", err)
+	}
+}
+
+func TestCall_LongErrorBodyTruncated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		// Write more than 300 chars.
+		w.Write([]byte(repeatStr("x", 500)))
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, err := client.Call("auth.test", nil)
+	if err == nil {
+		t.Fatal("expected error for HTTP 502")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if len(apiErr.Message) > 300 {
+		t.Errorf("error message should be truncated to 300 chars, got %d", len(apiErr.Message))
+	}
+}
+
+func TestCallPaginated_DoesNotMutateCallerParams(t *testing.T) {
+	page := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		resp := map[string]any{
+			"ok":    true,
+			"items": []any{map[string]any{"id": fmt.Sprintf("item-%d", page)}},
+		}
+		if page == 1 {
+			resp["response_metadata"] = map[string]any{"next_cursor": "page-2"}
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	params := map[string]string{"limit": "10"}
+	_, err := client.CallPaginated("items.list", params, "next_cursor", "items")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Caller's params should not have been mutated with a "cursor" key.
+	if _, hasCursor := params["cursor"]; hasCursor {
+		t.Error("CallPaginated should not mutate caller's params map")
+	}
+}
+
+func TestCallPaginated_EmptyCollectKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	items, err := client.CallPaginated("conversations.history", nil, "next_cursor", "messages")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("expected 0 items when collectKey is missing from response, got %d", len(items))
+	}
+}
+
+func TestGetTeamURL_APIError(t *testing.T) {
+	t.Setenv("SLACK_TEAM_URL", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "not_authed"})
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, err := client.GetTeamURL()
+	if err == nil {
+		t.Fatal("expected error when auth.test returns ok:false")
+	}
+}
+
+func TestGetTeamURL_CachedConcurrent(t *testing.T) {
+	t.Setenv("SLACK_TEAM_URL", "")
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "url": "https://concurrent.slack.com/"})
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+
+	// Call GetTeamURL concurrently from multiple goroutines.
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = client.GetTeamURL()
+		}()
+	}
+	wg.Wait()
+
+	if calls.Load() != 1 {
+		t.Errorf("expected exactly 1 API call (sync.Once), got %d", calls.Load())
+	}
+}
+
+func TestParseRetryAfter_ZeroValue(t *testing.T) {
+	c := NewClient("x", "x")
+	d, ok := c.parseRetryAfter("0")
+	if ok {
+		t.Error("parseRetryAfter(\"0\") should return false")
+	}
+	if d != 0 {
+		t.Errorf("expected 0 duration, got %v", d)
+	}
+}
+
+func TestParseRetryAfter_NegativeValue(t *testing.T) {
+	c := NewClient("x", "x")
+	_, ok := c.parseRetryAfter("-5")
+	if ok {
+		t.Error("parseRetryAfter(\"-5\") should return false")
+	}
+}
+
+func TestParseRetryAfter_NonNumeric(t *testing.T) {
+	c := NewClient("x", "x")
+	_, ok := c.parseRetryAfter("abc")
+	if ok {
+		t.Error("parseRetryAfter(\"abc\") should return false")
+	}
+}
+
+func TestParseRetryAfter_ValidValue(t *testing.T) {
+	c := NewClient("x", "x")
+	d, ok := c.parseRetryAfter("3")
+	if !ok {
+		t.Error("parseRetryAfter(\"3\") should return true")
+	}
+	if d != 3*time.Second {
+		t.Errorf("expected 3s, got %v", d)
+	}
+}
+
+func TestAsAPIError_Nil(t *testing.T) {
+	_, ok := AsAPIError(nil)
+	if ok {
+		t.Error("AsAPIError(nil) should return false")
+	}
+}
+
+func TestAsAPIError_NonAPIError(t *testing.T) {
+	_, ok := AsAPIError(fmt.Errorf("some other error"))
+	if ok {
+		t.Error("AsAPIError on non-APIError should return false")
+	}
+}
+
+func TestAsAPIError_Match(t *testing.T) {
+	err := &APIError{Code: 401, Message: "not_authed"}
+	got, ok := AsAPIError(err)
+	if !ok {
+		t.Fatal("AsAPIError should return true for *APIError")
+	}
+	if got.Code != 401 {
+		t.Errorf("Code = %d, want 401", got.Code)
+	}
+}
+
+func TestAsAPIError_Wrapped(t *testing.T) {
+	inner := &APIError{Code: 403, Message: "forbidden"}
+	err := fmt.Errorf("outer: %w", inner)
+	got, ok := AsAPIError(err)
+	if !ok {
+		t.Fatal("AsAPIError should unwrap wrapped errors")
+	}
+	if got.Code != 403 {
+		t.Errorf("Code = %d, want 403", got.Code)
+	}
+}
+
+func TestAPIError_ErrorString(t *testing.T) {
+	err := &APIError{Code: 500, Message: "internal"}
+	s := err.Error()
+	if s != "slack api error (HTTP 500): internal" {
+		t.Errorf("unexpected error string: %q", s)
+	}
+}
+
+func TestRateLimitError_ErrorString(t *testing.T) {
+	err := &RateLimitError{RetryAfter: 30 * time.Second}
+	s := err.Error()
+	if s != "rate limited: retry after 30s" {
+		t.Errorf("unexpected error string: %q", s)
+	}
+}
+
+func TestExtractItems_MissingKey(t *testing.T) {
+	result := map[string]any{"ok": true}
+	items := ExtractItems(result, "messages")
+	if items != nil {
+		t.Errorf("expected nil, got %v", items)
+	}
+}
+
+func TestExtractItems_WrongType(t *testing.T) {
+	result := map[string]any{"messages": "not-an-array"}
+	items := ExtractItems(result, "messages")
+	if items != nil {
+		t.Errorf("expected nil, got %v", items)
+	}
+}
+
+func TestExtractItems_NonMapElements(t *testing.T) {
+	result := map[string]any{
+		"items": []any{"string-element", 42, map[string]any{"id": "valid"}},
+	}
+	items := ExtractItems(result, "items")
+	if len(items) != 1 {
+		t.Errorf("expected 1 valid map item, got %d", len(items))
+	}
+}
+
+func TestExtractNextCursor_NoResponseMetadata(t *testing.T) {
+	result := map[string]any{"ok": true}
+	cursor := ExtractNextCursor(result, "next_cursor")
+	if cursor != "" {
+		t.Errorf("expected empty cursor, got %q", cursor)
+	}
+}
+
+func TestExtractNextCursor_ResponseMetadataNotMap(t *testing.T) {
+	result := map[string]any{"response_metadata": "not-a-map"}
+	cursor := ExtractNextCursor(result, "next_cursor")
+	if cursor != "" {
+		t.Errorf("expected empty cursor, got %q", cursor)
+	}
+}
+
+func TestExtractNextCursor_EmptyCursorString(t *testing.T) {
+	result := map[string]any{
+		"response_metadata": map[string]any{"next_cursor": ""},
+	}
+	cursor := ExtractNextCursor(result, "next_cursor")
+	if cursor != "" {
+		t.Errorf("expected empty cursor for empty string, got %q", cursor)
+	}
+}
+
+func TestNewClient_Defaults(t *testing.T) {
+	c := NewClient("xoxc-token", "xoxd-cookie")
+	if c.xoxc != "xoxc-token" {
+		t.Errorf("xoxc = %q", c.xoxc)
+	}
+	if c.xoxd != "xoxd-cookie" {
+		t.Errorf("xoxd = %q", c.xoxd)
+	}
+	if c.maxRetries != defaultMaxRetries {
+		t.Errorf("maxRetries = %d, want %d", c.maxRetries, defaultMaxRetries)
+	}
+	if c.pageDelay != defaultPageDelay {
+		t.Errorf("pageDelay = %v, want %v", c.pageDelay, defaultPageDelay)
+	}
+}
+
+func TestNewClient_WithOptions(t *testing.T) {
+	c := NewClient("x", "x", WithMaxRetries(10), WithPageDelay(500*time.Millisecond))
+	if c.maxRetries != 10 {
+		t.Errorf("maxRetries = %d, want 10", c.maxRetries)
+	}
+	if c.pageDelay != 500*time.Millisecond {
+		t.Errorf("pageDelay = %v, want 500ms", c.pageDelay)
+	}
+}
+
+// helper functions for tests
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func repeatStr(s string, n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		b.WriteString(s)
+	}
+	return b.String()
 }
 
 func TestExtractNextCursor_UsesCustomKey(t *testing.T) {

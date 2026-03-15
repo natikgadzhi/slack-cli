@@ -57,6 +57,48 @@ func TestSanitizeToken(t *testing.T) {
 				`had "Bearer " prefix — stripped`,
 			},
 		},
+		{
+			name:         "empty string",
+			input:        "",
+			wantClean:    "",
+			wantWarnings: nil,
+		},
+		{
+			name:         "only whitespace",
+			input:        "   ",
+			wantClean:    "",
+			wantWarnings: []string{"had leading/trailing whitespace — stripped"},
+		},
+		{
+			name:         "single character token",
+			input:        "x",
+			wantClean:    "x",
+			wantWarnings: nil,
+		},
+		{
+			name:         "BEARER uppercase prefix",
+			input:        "BEARER xoxc-abc123",
+			wantClean:    "xoxc-abc123",
+			wantWarnings: []string{`had "Bearer " prefix — stripped`},
+		},
+		{
+			name:         "mismatched quotes not stripped",
+			input:        `"xoxc-abc123'`,
+			wantClean:    `"xoxc-abc123'`,
+			wantWarnings: nil,
+		},
+		{
+			name:         "tab whitespace stripped",
+			input:        "\txoxc-abc123\t",
+			wantClean:    "xoxc-abc123",
+			wantWarnings: []string{"had leading/trailing whitespace — stripped"},
+		},
+		{
+			name:         "newline whitespace stripped",
+			input:        "\nxoxc-abc123\n",
+			wantClean:    "xoxc-abc123",
+			wantWarnings: []string{"had leading/trailing whitespace — stripped"},
+		},
 	}
 
 	for _, tc := range tests {

@@ -428,3 +428,196 @@ func TestSearchSlug(t *testing.T) {
 		t.Error("SearchSlug: different queries should produce different slugs")
 	}
 }
+
+// ---------- Additional frontmatter edge cases ----------
+
+func TestUnmarshalFrontmatter_InvalidCreatedAt(t *testing.T) {
+	input := []byte("---\ncreated_at: not-a-date\n---\n")
+	_, _, err := UnmarshalFrontmatter(input)
+	if err == nil {
+		t.Fatal("expected error for invalid created_at date")
+	}
+	if !strings.Contains(err.Error(), "invalid created_at") {
+		t.Errorf("error should mention invalid created_at, got: %v", err)
+	}
+}
+
+func TestUnmarshalFrontmatter_InvalidUpdatedAt(t *testing.T) {
+	input := []byte("---\nupdated_at: bad-time\n---\n")
+	_, _, err := UnmarshalFrontmatter(input)
+	if err == nil {
+		t.Fatal("expected error for invalid updated_at date")
+	}
+	if !strings.Contains(err.Error(), "invalid updated_at") {
+		t.Errorf("error should mention invalid updated_at, got: %v", err)
+	}
+}
+
+func TestUnmarshalFrontmatter_UnknownKeysIgnored(t *testing.T) {
+	input := []byte("---\ntool: slack-cli\nunknown_key: some-value\ncreated_at: 2026-03-14T10:00:00Z\n---\nbody\n")
+	meta, body, err := UnmarshalFrontmatter(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if meta.Tool != "slack-cli" {
+		t.Errorf("Tool = %q, want slack-cli", meta.Tool)
+	}
+	if string(body) != "body\n" {
+		t.Errorf("body = %q, want %q", body, "body\n")
+	}
+}
+
+func TestUnmarshalFrontmatter_EmptyLines(t *testing.T) {
+	input := []byte("---\ntool: slack-cli\n\n\nobject_type: message\n---\nbody\n")
+	meta, _, err := UnmarshalFrontmatter(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if meta.Tool != "slack-cli" {
+		t.Errorf("Tool = %q, want slack-cli", meta.Tool)
+	}
+	if meta.ObjectType != "message" {
+		t.Errorf("ObjectType = %q, want message", meta.ObjectType)
+	}
+}
+
+func TestStripQuotes_DoubleQuotes(t *testing.T) {
+	if got := stripQuotes(`"hello"`); got != "hello" {
+		t.Errorf("stripQuotes = %q, want %q", got, "hello")
+	}
+}
+
+func TestStripQuotes_SingleQuotesNotStripped(t *testing.T) {
+	// stripQuotes only handles double quotes.
+	if got := stripQuotes("'hello'"); got != "'hello'" {
+		t.Errorf("stripQuotes = %q, want %q (single quotes should not be stripped)", got, "'hello'")
+	}
+}
+
+func TestStripQuotes_Empty(t *testing.T) {
+	if got := stripQuotes(""); got != "" {
+		t.Errorf("stripQuotes(\"\") = %q, want empty", got)
+	}
+}
+
+func TestStripQuotes_SingleChar(t *testing.T) {
+	if got := stripQuotes("x"); got != "x" {
+		t.Errorf("stripQuotes(\"x\") = %q, want %q", got, "x")
+	}
+}
+
+func TestStripQuotes_MismatchedQuotes(t *testing.T) {
+	if got := stripQuotes(`"hello`); got != `"hello` {
+		t.Errorf("stripQuotes = %q, want %q (mismatched quotes)", got, `"hello`)
+	}
+}
+
+func TestMarshalFrontmatter_BodyWithoutTrailingNewline(t *testing.T) {
+	meta := testMeta()
+	body := []byte("no trailing newline")
+	data := MarshalFrontmatter(meta, body)
+	s := string(data)
+	// Should ensure trailing newline.
+	if s[len(s)-1] != '\n' {
+		t.Error("MarshalFrontmatter should ensure trailing newline")
+	}
+}
+
+// ---------- Additional cache operation tests ----------
+
+func TestGetCorruptedFile(t *testing.T) {
+	c := newTestCache(t)
+
+	// Write a file that's not valid frontmatter.
+	p := filepath.Join(c.baseDir, "messages", "C111")
+	os.MkdirAll(p, 0o755)
+	os.WriteFile(filepath.Join(p, "ts1.md"), []byte("not valid frontmatter"), 0o644)
+
+	_, _, _, err := c.Get("messages", "C111/ts1")
+	if err == nil {
+		t.Fatal("expected error for corrupted cache file")
+	}
+}
+
+func TestPathTraversal_ObjectTypeTraversal(t *testing.T) {
+	c := newTestCache(t)
+
+	// Try path traversal in objectType (though slug is clean).
+	_, _, _, err := c.Get("../../etc", "passwd")
+	if err == nil {
+		t.Fatal("expected error for path traversal in objectType")
+	}
+}
+
+func TestPutAndGet_EmptyBody(t *testing.T) {
+	c := newTestCache(t)
+
+	meta := testMeta()
+	if err := c.Put("messages", "C111/ts-empty", nil, meta); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	body, _, found, err := c.Get("messages", "C111/ts-empty")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(body) != 0 {
+		t.Errorf("expected empty body, got %q", body)
+	}
+}
+
+func TestNewCacheWithDir_CreatesDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested", "cache", "dir")
+	c, err := NewCacheWithDir(dir)
+	if err != nil {
+		t.Fatalf("NewCacheWithDir: %v", err)
+	}
+	if c.baseDir != dir {
+		t.Errorf("baseDir = %q, want %q", c.baseDir, dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("directory not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected directory")
+	}
+}
+
+func TestSearchSlug_EmptyQuery(t *testing.T) {
+	slug := SearchSlug("")
+	if len(slug) != 12 {
+		t.Errorf("SearchSlug length for empty query: got %d, want 12", len(slug))
+	}
+}
+
+func TestNewCache_WithEnvOverride(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "cache-via-env")
+	t.Setenv("SLACK_DATA_DIR", dir)
+
+	c, err := NewCache()
+	if err != nil {
+		t.Fatalf("NewCache: %v", err)
+	}
+	if c.baseDir != dir {
+		t.Errorf("baseDir = %q, want %q", c.baseDir, dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("directory should be created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected directory")
+	}
+}
+
+func TestChannelHistorySlug_EmptyParts(t *testing.T) {
+	got := ChannelHistorySlug("C111", "", "")
+	want := "C111/_"
+	if got != want {
+		t.Errorf("ChannelHistorySlug with empty parts: got %q, want %q", got, want)
+	}
+}

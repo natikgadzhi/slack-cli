@@ -143,3 +143,53 @@ func TestKeychainSet_AddFailure(t *testing.T) {
 		t.Errorf("error message should mention 'failed to store keychain entry', got: %v", err)
 	}
 }
+
+func TestKeychainGet_TrimsWhitespace(t *testing.T) {
+	// The helper outputs "xoxc-test-token-123\n". KeychainGet should trim
+	// trailing newlines / whitespace.
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_get_success")
+
+	token, err := KeychainGet("slack-xoxc-token")
+	if err != nil {
+		t.Fatalf("KeychainGet returned unexpected error: %v", err)
+	}
+	if strings.Contains(token, "\n") {
+		t.Errorf("KeychainGet should trim newlines, got %q", token)
+	}
+	if strings.HasSuffix(token, " ") {
+		t.Errorf("KeychainGet should trim trailing spaces, got %q", token)
+	}
+}
+
+func TestKeychainGet_ErrorMessageContainsServiceAndAccount(t *testing.T) {
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_get_failure")
+
+	_, err := KeychainGet("custom-service")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "custom-service") {
+		t.Errorf("error should contain service name, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Store it with") {
+		t.Errorf("error should contain hint about storing, got: %v", err)
+	}
+}
+
+func TestKeychainSet_ErrorMessageContainsServiceAndAccount(t *testing.T) {
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_set_add_failure")
+
+	err := KeychainSet("custom-service", "some-token")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "custom-service") {
+		t.Errorf("error should contain service name, got: %v", err)
+	}
+}
