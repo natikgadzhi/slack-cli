@@ -9,6 +9,7 @@ import (
 var (
 	OutputFormat string
 	NoCache      bool
+	OutputDir    string
 )
 
 // rootCmd is the top-level command for the CLI.
@@ -21,6 +22,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&OutputFormat, "output", "o", "json", "output format (json|markdown)")
 	rootCmd.PersistentFlags().BoolVar(&NoCache, "no-cache", false, "disable cache")
+	rootCmd.PersistentFlags().StringVarP(&OutputDir, "output-dir", "d", "", "write individual markdown files per item to this directory")
 	rootCmd.SilenceErrors = true
 }
 

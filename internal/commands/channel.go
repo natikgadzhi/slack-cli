@@ -160,6 +160,17 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		Command: fmt.Sprintf("channel %s --since %s --until %s --limit %d", nameOrID, since, until, limit),
 	})
 
+	// Write per-item files if --output-dir is set.
+	// For the channel command, each message gets its own file.
+	if OutputDir != "" {
+		channelName := nameOrID
+		// If nameOrID looks like a channel ID (starts with C/G), use it as the ID context.
+		// Otherwise, it's already a name.
+		if err := writeItemFiles(OutputDir, "channels", formatted, channelID, channelName); err != nil {
+			return fmt.Errorf("writing output files: %w", err)
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
 	return nil
 }

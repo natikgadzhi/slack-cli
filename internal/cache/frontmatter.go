@@ -18,6 +18,12 @@ type Metadata struct {
 	UpdatedAt  time.Time
 	SourceURL  string
 	Command    string
+
+	// Optional per-item fields (used by --output-dir file-per-item writes).
+	Channel   string // resolved channel name
+	ChannelID string // Slack channel ID
+	User      string // message author display name
+	ThreadTS  string // thread parent timestamp
 }
 
 // frontmatterSeparator is the YAML frontmatter delimiter.
@@ -41,6 +47,18 @@ func MarshalFrontmatter(meta Metadata, body []byte) []byte {
 	}
 	if meta.Command != "" {
 		fmt.Fprintf(&b, "command: \"%s\"\n", meta.Command)
+	}
+	if meta.Channel != "" {
+		fmt.Fprintf(&b, "channel: %s\n", meta.Channel)
+	}
+	if meta.ChannelID != "" {
+		fmt.Fprintf(&b, "channel_id: %s\n", meta.ChannelID)
+	}
+	if meta.User != "" {
+		fmt.Fprintf(&b, "user: %s\n", meta.User)
+	}
+	if meta.ThreadTS != "" {
+		fmt.Fprintf(&b, "thread_ts: %s\n", meta.ThreadTS)
 	}
 	b.WriteString(frontmatterSeparator)
 	b.WriteByte('\n')
@@ -138,6 +156,14 @@ func parseFrontmatter(block string) (Metadata, error) {
 			meta.SourceURL = value
 		case "command":
 			meta.Command = value
+		case "channel":
+			meta.Channel = value
+		case "channel_id":
+			meta.ChannelID = value
+		case "user":
+			meta.User = value
+		case "thread_ts":
+			meta.ThreadTS = value
 		}
 	}
 

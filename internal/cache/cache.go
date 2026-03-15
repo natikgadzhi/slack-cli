@@ -121,6 +121,14 @@ func (c *Cache) Put(objectType, slug string, content []byte, meta Metadata) erro
 	return nil
 }
 
+// PutItem writes a single item file with pre-rendered markdown body and
+// frontmatter. It reuses the same atomic-write and path-safety logic as Put.
+// Unlike Put (which stores aggregate/JSON data), PutItem is designed for
+// the --output-dir feature where each item gets its own rendered markdown file.
+func (c *Cache) PutItem(objectType, slug string, body []byte, meta Metadata) error {
+	return c.Put(objectType, slug, body, meta)
+}
+
 // path returns the filesystem path for a cached object.
 // It returns an error if the resolved path escapes the cache base directory
 // (e.g. via a slug containing "..").
