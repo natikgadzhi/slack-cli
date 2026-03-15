@@ -25,22 +25,22 @@ const frontmatterSeparator = "---"
 
 // MarshalFrontmatter encodes metadata and a Markdown body into a single
 // byte slice with YAML frontmatter. The schema is small and fixed, so we
-// use fmt.Sprintf rather than pulling in a YAML library.
+// use fmt.Fprintf rather than pulling in a YAML library.
 func MarshalFrontmatter(meta Metadata, body []byte) []byte {
 	var b strings.Builder
 
 	b.WriteString(frontmatterSeparator)
 	b.WriteByte('\n')
-	b.WriteString(fmt.Sprintf("tool: %s\n", meta.Tool))
-	b.WriteString(fmt.Sprintf("object_type: %s\n", meta.ObjectType))
-	b.WriteString(fmt.Sprintf("slug: %s\n", meta.Slug))
-	b.WriteString(fmt.Sprintf("created_at: %s\n", meta.CreatedAt.UTC().Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("updated_at: %s\n", meta.UpdatedAt.UTC().Format(time.RFC3339)))
+	fmt.Fprintf(&b, "tool: %s\n", meta.Tool)
+	fmt.Fprintf(&b, "object_type: %s\n", meta.ObjectType)
+	fmt.Fprintf(&b, "slug: %s\n", meta.Slug)
+	fmt.Fprintf(&b, "created_at: %s\n", meta.CreatedAt.UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "updated_at: %s\n", meta.UpdatedAt.UTC().Format(time.RFC3339))
 	if meta.SourceURL != "" {
-		b.WriteString(fmt.Sprintf("source_url: %s\n", meta.SourceURL))
+		fmt.Fprintf(&b, "source_url: %s\n", meta.SourceURL)
 	}
 	if meta.Command != "" {
-		b.WriteString(fmt.Sprintf("command: \"%s\"\n", meta.Command))
+		fmt.Fprintf(&b, "command: \"%s\"\n", meta.Command)
 	}
 	b.WriteString(frontmatterSeparator)
 	b.WriteByte('\n')
@@ -80,7 +80,13 @@ func UnmarshalFrontmatter(data []byte) (Metadata, []byte, error) {
 	}
 
 	fmBlock := rest[:idx]
-	body := []byte(rest[idx+len(frontmatterSeparator)+1:])
+
+	// When the closing "---" is at the very end of the string (no trailing
+	// newline), the body is empty. Guard against an out-of-bounds slice.
+	var body []byte
+	if afterClose := idx + len(frontmatterSeparator) + 1; afterClose <= len(rest) {
+		body = []byte(rest[afterClose:])
+	}
 
 	meta, err := parseFrontmatter(fmBlock)
 	if err != nil {

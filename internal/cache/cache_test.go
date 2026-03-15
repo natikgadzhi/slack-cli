@@ -141,6 +141,22 @@ func TestUnmarshalFrontmatterMissingClosing(t *testing.T) {
 	}
 }
 
+func TestUnmarshalFrontmatterClosingAtEOFNoTrailingNewline(t *testing.T) {
+	// The closing "---" is at EOF with no trailing newline.
+	// This must not panic and should return an empty body.
+	input := []byte("---\ntool: slack-cli\n---")
+	meta, body, err := UnmarshalFrontmatter(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if meta.Tool != "slack-cli" {
+		t.Errorf("Tool: got %q, want %q", meta.Tool, "slack-cli")
+	}
+	if len(body) != 0 {
+		t.Errorf("expected empty body, got %q", body)
+	}
+}
+
 // ---------- Roundtrip marshal/unmarshal ----------
 
 func TestFrontmatterRoundtrip(t *testing.T) {
@@ -347,6 +363,32 @@ func TestPutOverwritesExisting(t *testing.T) {
 	}
 	if !gotMeta.UpdatedAt.Equal(testTime.Add(time.Hour)) {
 		t.Errorf("UpdatedAt should reflect v2")
+	}
+}
+
+// ---------- Path traversal tests ----------
+
+func TestPathTraversalGetBlocked(t *testing.T) {
+	c := newTestCache(t)
+
+	_, _, _, err := c.Get("messages", "../../etc/passwd")
+	if err == nil {
+		t.Fatal("expected error for path traversal slug")
+	}
+	if !strings.Contains(err.Error(), "escapes base directory") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestPathTraversalPutBlocked(t *testing.T) {
+	c := newTestCache(t)
+
+	err := c.Put("messages", "../../etc/passwd", []byte("evil"), Metadata{})
+	if err == nil {
+		t.Fatal("expected error for path traversal slug")
+	}
+	if !strings.Contains(err.Error(), "escapes base directory") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 

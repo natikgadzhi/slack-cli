@@ -43,7 +43,10 @@ func NewCacheWithDir(dir string) (*Cache, error) {
 // and err is nil. The returned content is the Markdown body (without
 // frontmatter).
 func (c *Cache) Get(objectType, slug string) (content []byte, meta Metadata, found bool, err error) {
-	p := c.path(objectType, slug)
+	p, pathErr := c.path(objectType, slug)
+	if pathErr != nil {
+		return nil, Metadata{}, false, pathErr
+	}
 	data, readErr := os.ReadFile(p)
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
@@ -64,7 +67,10 @@ func (c *Cache) Get(objectType, slug string) (content []byte, meta Metadata, fou
 // created as needed. The write uses a temp file + rename to avoid
 // partial reads.
 func (c *Cache) Put(objectType, slug string, content []byte, meta Metadata) error {
-	p := c.path(objectType, slug)
+	p, pathErr := c.path(objectType, slug)
+	if pathErr != nil {
+		return pathErr
+	}
 	dir := filepath.Dir(p)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -116,10 +122,17 @@ func (c *Cache) Put(objectType, slug string, content []byte, meta Metadata) erro
 }
 
 // path returns the filesystem path for a cached object.
-func (c *Cache) path(objectType, slug string) string {
+// It returns an error if the resolved path escapes the cache base directory
+// (e.g. via a slug containing "..").
+func (c *Cache) path(objectType, slug string) (string, error) {
 	// Slug may contain slashes (e.g. "C12345678/1741234567.123456"),
 	// which naturally maps to subdirectories.
-	return filepath.Join(c.baseDir, objectType, slug+".md")
+	p := filepath.Clean(filepath.Join(c.baseDir, objectType, slug+".md"))
+	baseDir := filepath.Clean(c.baseDir)
+	if !strings.HasPrefix(p, baseDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("cache: path %q escapes base directory", slug)
+	}
+	return p, nil
 }
 
 // MessageSlug returns the cache slug for a single message.
@@ -139,9 +152,3 @@ func SearchSlug(query string) string {
 	return fmt.Sprintf("%x", h[:6]) // 12 hex chars
 }
 
-// SanitizeTS cleans up a Slack timestamp for use as a filename.
-// Slack timestamps look like "1741234567.123456" which is already
-// filesystem-safe, but this function is provided for clarity.
-func SanitizeTS(ts string) string {
-	return strings.ReplaceAll(ts, "/", "_")
-}
