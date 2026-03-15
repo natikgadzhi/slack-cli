@@ -5,12 +5,13 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	"github.com/natikgadzhi/slack-cli/internal/output"
-	"github.com/spf13/cobra"
 )
 
 var channelCmd = &cobra.Command{

@@ -92,7 +92,7 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retryAfter, hasHeader := c.parseRetryAfter(resp.Header.Get("Retry-After"))
 			// Drain and close the body before retrying to avoid stacking deferred closes.
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 
 			if retriesLeft <= 0 {

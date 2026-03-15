@@ -151,4 +151,3 @@ func SearchSlug(query string) string {
 	h := sha256.Sum256([]byte(query))
 	return fmt.Sprintf("%x", h[:6]) // 12 hex chars
 }
-

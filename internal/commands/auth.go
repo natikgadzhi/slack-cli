@@ -7,10 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/config"
-	"github.com/spf13/cobra"
 )
 
 var authCmd = &cobra.Command{
