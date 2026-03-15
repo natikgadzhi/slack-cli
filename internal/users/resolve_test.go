@@ -2,6 +2,8 @@ package users
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -129,7 +131,7 @@ func TestResolveUsers_CacheFileCreated(t *testing.T) {
 	resolver, _ := newTestResolver(t, apiUsers)
 
 	// Verify cache file does not exist yet.
-	if _, err := os.Stat(resolver.cachePath); !os.IsNotExist(err) {
+	if _, err := os.Stat(resolver.cachePath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("cache file should not exist before first resolve")
 	}
 
@@ -173,6 +175,48 @@ func TestResolveUsers_APIFailure_FallsBackToUID(t *testing.T) {
 	}
 }
 
+func TestResolveUsers_FailedUID_NotCached(t *testing.T) {
+	// The server does not know about U999, so the API returns ok:false
+	// and fetchDisplayName returns the raw UID. The raw UID should NOT
+	// be persisted to the cache, so a future call can retry.
+	apiUsers := map[string]string{
+		"U888": "Helen",
+	}
+	resolver, _ := newTestResolver(t, apiUsers)
+
+	messages := []map[string]any{
+		{"user": "U888", "text": "known"},
+		{"user": "U999", "text": "unknown"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0]["user"] != "Helen" {
+		t.Errorf("expected Helen, got %v", result[0]["user"])
+	}
+	if result[1]["user"] != "U999" {
+		t.Errorf("expected U999 (fallback), got %v", result[1]["user"])
+	}
+
+	// Verify cache file exists and contains U888 but NOT U999.
+	data, err := os.ReadFile(resolver.cachePath)
+	if err != nil {
+		t.Fatalf("cache file not created: %v", err)
+	}
+	var cached map[string]string
+	if err := json.Unmarshal(data, &cached); err != nil {
+		t.Fatalf("invalid cache JSON: %v", err)
+	}
+	if cached["U888"] != "Helen" {
+		t.Errorf("cache should contain Helen for U888, got %v", cached["U888"])
+	}
+	if _, found := cached["U999"]; found {
+		t.Errorf("cache should NOT contain U999 (failed lookup), but found %q", cached["U999"])
+	}
+}
+
 func TestResolveUsers_MessagesWithoutUserField(t *testing.T) {
 	resolver, _ := newTestResolver(t, nil)
 
@@ -195,6 +239,68 @@ func TestResolveUsers_MessagesWithoutUserField(t *testing.T) {
 	}
 	if _, hasUser := result[0]["user"]; hasUser {
 		t.Errorf("message without user field should not gain one")
+	}
+}
+
+func TestResolveUsers_PrefersDisplayName(t *testing.T) {
+	// When the API returns a profile with display_name, it should be
+	// preferred over real_name and name.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		uid := r.FormValue("user")
+		var resp map[string]any
+		switch uid {
+		case "U_DN":
+			// Has display_name, real_name, and name.
+			resp = map[string]any{
+				"ok": true,
+				"user": map[string]any{
+					"name":      "u_dn",
+					"real_name": "Display Real",
+					"profile": map[string]any{
+						"display_name": "Preferred Display",
+					},
+				},
+			}
+		case "U_RN":
+			// Has real_name and name, but empty display_name.
+			resp = map[string]any{
+				"ok": true,
+				"user": map[string]any{
+					"name":      "u_rn",
+					"real_name": "Real Name Only",
+					"profile": map[string]any{
+						"display_name": "",
+					},
+				},
+			}
+		default:
+			resp = map[string]any{"ok": false, "error": "user_not_found"}
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := api.NewClient("xoxc-test", "xoxd-test", api.WithBaseURL(srv.URL))
+	resolver := &UserResolver{
+		client:    client,
+		cachePath: filepath.Join(t.TempDir(), "users.json"),
+	}
+
+	messages := []map[string]any{
+		{"user": "U_DN", "text": "has display_name"},
+		{"user": "U_RN", "text": "empty display_name"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0]["user"] != "Preferred Display" {
+		t.Errorf("expected 'Preferred Display', got %v", result[0]["user"])
+	}
+	if result[1]["user"] != "Real Name Only" {
+		t.Errorf("expected 'Real Name Only', got %v", result[1]["user"])
 	}
 }
 

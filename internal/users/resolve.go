@@ -4,7 +4,9 @@ package users
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -54,11 +56,20 @@ func (r *UserResolver) ResolveUsers(messages []map[string]any) ([]map[string]any
 	}
 
 	// Fetch each unknown user and update the cache.
+	// If the API fails and returns the raw UID, we still use it for this
+	// batch (so the user field gets a value) but we don't persist it in
+	// the cache, allowing a retry on the next invocation.
 	dirty := false
+	failedUIDs := make(map[string]string) // uid -> uid (for current batch only)
 	for uid := range unknown {
 		name := r.fetchDisplayName(uid)
-		cache[uid] = name
-		dirty = true
+		if name == uid {
+			// Transient failure or unknown user — don't cache.
+			failedUIDs[uid] = uid
+		} else {
+			cache[uid] = name
+			dirty = true
+		}
 	}
 
 	if dirty {
@@ -68,6 +79,7 @@ func (r *UserResolver) ResolveUsers(messages []map[string]any) ([]map[string]any
 	}
 
 	// Build result with user fields replaced.
+	// For failed UIDs that weren't cached, the raw UID is kept as-is.
 	result := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		m := copyMap(msg)
@@ -75,6 +87,7 @@ func (r *UserResolver) ResolveUsers(messages []map[string]any) ([]map[string]any
 			if name, found := cache[uid]; found {
 				m["user"] = name
 			}
+			// failedUIDs map to themselves, so m["user"] stays as the raw UID.
 		}
 		result = append(result, m)
 	}
@@ -86,7 +99,7 @@ func (r *UserResolver) ResolveUsers(messages []map[string]any) ([]map[string]any
 func (r *UserResolver) loadCache() (map[string]string, error) {
 	data, err := os.ReadFile(r.cachePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return make(map[string]string), nil
 		}
 		return nil, fmt.Errorf("reading user cache: %w", err)
@@ -110,7 +123,7 @@ func (r *UserResolver) saveCache(cache map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("encoding user cache: %w", err)
 	}
-	if err := os.WriteFile(r.cachePath, data, 0o644); err != nil {
+	if err := os.WriteFile(r.cachePath, data, 0o600); err != nil {
 		return fmt.Errorf("writing user cache: %w", err)
 	}
 	return nil
@@ -127,6 +140,13 @@ func (r *UserResolver) fetchDisplayName(uid string) string {
 	user, ok := data["user"].(map[string]any)
 	if !ok {
 		return uid
+	}
+	// Prefer display_name from the profile (what users see in Slack),
+	// then fall back to real_name, then name, then the raw UID.
+	if profile, ok := user["profile"].(map[string]any); ok {
+		if name, ok := profile["display_name"].(string); ok && name != "" {
+			return name
+		}
 	}
 	if name, ok := user["real_name"].(string); ok && name != "" {
 		return name
