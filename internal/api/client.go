@@ -93,7 +93,7 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 			retryAfter, hasHeader := c.parseRetryAfter(resp.Header.Get("Retry-After"))
 			// Drain and close the body before retrying to avoid stacking deferred closes.
 			_, _ = io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if retriesLeft <= 0 {
 				return nil, &RateLimitError{RetryAfter: retryAfter}
@@ -105,7 +105,7 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 		}
 
 		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("reading response from %s: %w", endpoint, err)
 		}
