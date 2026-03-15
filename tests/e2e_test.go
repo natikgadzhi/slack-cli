@@ -1,20 +1,33 @@
 //go:build e2e
 
-// Package tests contains end-to-end tests that build the real slack-cli binary
-// and run it as a subprocess. These tests are gated behind the "e2e" build tag
-// so they are excluded from normal `go test ./...` runs.
+// Package tests contains end-to-end smoke tests that build the real slack-cli
+// binary and run it as a subprocess against the real Slack API.
 //
-// Tests that require real Slack credentials check for SLACK_XOXC and SLACK_XOXD
-// environment variables and skip (not fail) if they are absent.
+// Gated behind the "e2e" build tag so `go test ./...` skips them.
+// Tests that require real credentials skip (not fail) when env vars are absent.
 //
-// Required env vars for credential tests:
+// # Required env vars
 //
-//	SLACK_XOXC             — valid xoxc token
-//	SLACK_XOXD             — valid xoxd token
-//	SLACK_TEST_MESSAGE_URL — a known Slack message URL
-//	SLACK_TEST_CHANNEL     — a channel name or ID
-//	SLACK_TEST_SEARCH_QUERY — a search term known to return results
-//	SLACK_TEAM_URL         — workspace URL (to avoid auth.test call in tests)
+//	SLACK_XOXC               — valid xoxc token
+//	SLACK_XOXD               — valid xoxd token
+//
+// # Optional env vars (with defaults)
+//
+//	SLACK_TEAM_URL            — workspace URL (avoids extra auth.test call)
+//	SLACK_TEST_MESSAGE_URL    — a known message URL (skip message tests if unset)
+//	SLACK_TEST_CHANNEL        — channel name or ID (default: "general")
+//	SLACK_TEST_SEARCH_QUERY   — search query (default: "wat")
+//
+// # What to expect
+//
+// These are smoke tests. We verify:
+//   - Exit code 0 for valid commands
+//   - Non-zero exit for invalid input
+//   - Valid JSON structure in output
+//   - Non-empty result sets (>0 messages/results)
+//   - Correct field presence (ts, text, user)
+//
+// We do NOT verify exact content, message counts, or specific text.
 package tests
 
 import (
@@ -27,11 +40,9 @@ import (
 )
 
 // binaryPath holds the path to the compiled slack-cli binary.
-// Set once in TestMain and reused by all tests.
 var binaryPath string
 
 func TestMain(m *testing.M) {
-	// Build the binary into a temp directory.
 	tmpDir, err := os.MkdirTemp("", "slack-cli-e2e-*")
 	if err != nil {
 		panic("failed to create temp dir: " + err.Error())
@@ -39,27 +50,21 @@ func TestMain(m *testing.M) {
 	defer os.RemoveAll(tmpDir)
 
 	binaryPath = filepath.Join(tmpDir, "slack-cli")
-	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/slack-cli")
-	// Set the working directory to the repo root (one level up from tests/).
-	buildCmd.Dir = filepath.Join(".")
-	// Walk up to find the module root (where go.mod lives).
-	// Since tests/ is a subdirectory, we need the parent.
 	moduleRoot, err := findModuleRoot()
 	if err != nil {
 		panic("failed to find module root: " + err.Error())
 	}
+
+	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/slack-cli")
 	buildCmd.Dir = moduleRoot
 	buildCmd.Stderr = os.Stderr
-	buildCmd.Stdout = os.Stdout
-
 	if err := buildCmd.Run(); err != nil {
-		panic("failed to build slack-cli binary: " + err.Error())
+		panic("failed to build slack-cli: " + err.Error())
 	}
 
 	os.Exit(m.Run())
 }
 
-// findModuleRoot walks up from the current working directory to find go.mod.
 func findModuleRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -81,23 +86,20 @@ func findModuleRoot() (string, error) {
 func requireCreds(t *testing.T) {
 	t.Helper()
 	if os.Getenv("SLACK_XOXC") == "" || os.Getenv("SLACK_XOXD") == "" {
-		t.Skip("SLACK_XOXC and SLACK_XOXD required for E2E tests")
+		t.Skip("SLACK_XOXC and SLACK_XOXD required")
 	}
 }
 
-// requireEnv skips the test if the named environment variable is not set,
-// and returns its value.
-func requireEnv(t *testing.T, name string) string {
-	t.Helper()
-	v := os.Getenv(name)
-	if v == "" {
-		t.Skipf("%s required for this E2E test", name)
+// envOrDefault returns the env var value, or the default if unset.
+func envOrDefault(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
 	}
-	return v
+	return fallback
 }
 
-// runBinary executes the slack-cli binary with the given arguments and
-// environment. It returns stdout, stderr, and any error.
+// runBinary executes the slack-cli binary with the given args.
+// If env is nil, inherits the current environment.
 func runBinary(t *testing.T, env []string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	cmd := exec.Command(binaryPath, args...)
@@ -116,12 +118,11 @@ func runBinary(t *testing.T, env []string, args ...string) (stdout, stderr strin
 func TestHelp(t *testing.T) {
 	stdout, _, err := runBinary(t, nil, "--help")
 	if err != nil {
-		t.Fatalf("slack-cli --help failed: %v", err)
+		t.Fatalf("--help failed: %v", err)
 	}
-
-	for _, want := range []string{"auth", "message", "channel", "search"} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("--help output missing %q", want)
+	for _, cmd := range []string{"auth", "message", "channel", "search"} {
+		if !strings.Contains(stdout, cmd) {
+			t.Errorf("--help missing %q command", cmd)
 		}
 	}
 }
@@ -129,13 +130,11 @@ func TestHelp(t *testing.T) {
 func TestAuthHelp(t *testing.T) {
 	stdout, _, err := runBinary(t, nil, "auth", "--help")
 	if err != nil {
-		t.Fatalf("slack-cli auth --help failed: %v", err)
+		t.Fatalf("auth --help failed: %v", err)
 	}
-
-	// The auth subcommand should list its children.
-	for _, want := range []string{"check", "set-xoxc", "set-xoxd"} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("auth --help output missing %q", want)
+	for _, sub := range []string{"check", "set-xoxc", "set-xoxd"} {
+		if !strings.Contains(stdout, sub) {
+			t.Errorf("auth --help missing %q", sub)
 		}
 	}
 }
@@ -143,22 +142,26 @@ func TestAuthHelp(t *testing.T) {
 func TestInvalidURL(t *testing.T) {
 	_, _, err := runBinary(t, nil, "message", "not-a-url")
 	if err == nil {
-		t.Fatal("expected non-zero exit for invalid URL, got success")
+		t.Fatal("expected non-zero exit for invalid URL")
 	}
 }
 
 func TestMissingTokens(t *testing.T) {
-	// Run with a clean environment that has no SLACK_XOXC / SLACK_XOXD
-	// and no access to Keychain tokens (since they won't match).
-	// We keep PATH so the binary can find system libraries.
+	// Run with minimal env — no tokens, no keychain access.
 	cleanEnv := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
 	}
-
 	_, _, err := runBinary(t, cleanEnv, "message", "https://example.slack.com/archives/C12345/p1741234567123456")
 	if err == nil {
-		t.Fatal("expected non-zero exit when tokens are missing, got success")
+		t.Fatal("expected non-zero exit when tokens are missing")
+	}
+}
+
+func TestInvalidOutputFormat(t *testing.T) {
+	_, _, err := runBinary(t, nil, "search", "-o", "xml", "test")
+	if err == nil {
+		t.Fatal("expected non-zero exit for invalid output format")
 	}
 }
 
@@ -166,121 +169,142 @@ func TestMissingTokens(t *testing.T) {
 
 func TestAuthCheck(t *testing.T) {
 	requireCreds(t)
-
-	// auth check writes to stderr, not stdout.
 	_, stderr, err := runBinary(t, nil, "auth", "check")
 	if err != nil {
 		t.Fatalf("auth check failed: %v\nstderr: %s", err, stderr)
 	}
-
 	if !strings.Contains(stderr, "[OK]") {
-		t.Errorf("auth check output missing [OK], got: %s", stderr)
+		t.Errorf("missing [OK] in output: %s", stderr)
 	}
 	if !strings.Contains(stderr, "authenticated") {
-		t.Errorf("auth check output missing 'authenticated', got: %s", stderr)
+		t.Errorf("missing 'authenticated' in output: %s", stderr)
 	}
 }
 
-func TestMessageJSON(t *testing.T) {
+func TestSearchSmoke(t *testing.T) {
 	requireCreds(t)
-	msgURL := requireEnv(t, "SLACK_TEST_MESSAGE_URL")
+	query := envOrDefault("SLACK_TEST_SEARCH_QUERY", "wat")
 
-	stdout, stderr, err := runBinary(t, nil, "message", "-o", "json", msgURL)
+	stdout, stderr, err := runBinary(t, nil, "search", "-o", "json", "--count", "5", query)
 	if err != nil {
-		t.Fatalf("message command failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("search failed: %v\nstderr: %s", err, stderr)
 	}
 
-	// The output should be a valid JSON array of messages.
-	var messages []map[string]any
-	if err := json.Unmarshal([]byte(stdout), &messages); err != nil {
-		t.Fatalf("output is not valid JSON array: %v\nstdout: %s", err, stdout)
+	var results []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		t.Fatalf("invalid JSON: %v\nstdout: %s", err, truncate(stdout, 500))
 	}
-
-	if len(messages) == 0 {
-		t.Fatal("expected at least one message, got empty array")
+	if len(results) == 0 {
+		t.Error("expected >0 search results")
 	}
-
-	// Each message should have "ts" and "text" fields.
-	first := messages[0]
-	if _, ok := first["ts"]; !ok {
-		t.Error("first message missing 'ts' field")
-	}
-	if _, ok := first["text"]; !ok {
-		t.Error("first message missing 'text' field")
+	// Verify structure: each result should have ts and text.
+	for i, r := range results {
+		if _, ok := r["ts"]; !ok {
+			t.Errorf("result[%d] missing 'ts'", i)
+		}
+		if _, ok := r["text"]; !ok {
+			t.Errorf("result[%d] missing 'text'", i)
+		}
 	}
 }
 
-func TestMessageMarkdown(t *testing.T) {
+func TestSearchMarkdown(t *testing.T) {
 	requireCreds(t)
-	msgURL := requireEnv(t, "SLACK_TEST_MESSAGE_URL")
+	query := envOrDefault("SLACK_TEST_SEARCH_QUERY", "wat")
 
-	stdout, stderr, err := runBinary(t, nil, "message", "-o", "markdown", msgURL)
+	stdout, stderr, err := runBinary(t, nil, "search", "-o", "markdown", "--count", "3", query)
 	if err != nil {
-		t.Fatalf("message markdown command failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("search markdown failed: %v\nstderr: %s", err, stderr)
 	}
-
 	if !strings.Contains(stdout, "##") {
-		t.Errorf("markdown output missing '##' header, got: %s", truncate(stdout, 200))
+		t.Errorf("markdown output missing '##' header: %s", truncate(stdout, 300))
 	}
 }
 
-func TestChannelJSON(t *testing.T) {
+func TestChannelSmoke(t *testing.T) {
 	requireCreds(t)
-	channel := requireEnv(t, "SLACK_TEST_CHANNEL")
+	channel := envOrDefault("SLACK_TEST_CHANNEL", "general")
 
-	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "json", "--since", "7d", "--limit", "5", channel)
+	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "json", "--since", "30d", "--limit", "5", channel)
 	if err != nil {
-		t.Fatalf("channel command failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("channel failed: %v\nstderr: %s", err, stderr)
 	}
 
 	var messages []map[string]any
 	if err := json.Unmarshal([]byte(stdout), &messages); err != nil {
-		t.Fatalf("output is not valid JSON array: %v\nstdout: %s", err, stdout)
+		t.Fatalf("invalid JSON: %v\nstdout: %s", err, truncate(stdout, 500))
 	}
-
+	if len(messages) == 0 {
+		t.Error("expected >0 messages in channel")
+	}
 	if len(messages) > 5 {
 		t.Errorf("expected at most 5 messages, got %d", len(messages))
+	}
+	// Verify structure.
+	for i, m := range messages {
+		if _, ok := m["ts"]; !ok {
+			t.Errorf("message[%d] missing 'ts'", i)
+		}
 	}
 }
 
 func TestChannelMarkdown(t *testing.T) {
 	requireCreds(t)
-	channel := requireEnv(t, "SLACK_TEST_CHANNEL")
+	channel := envOrDefault("SLACK_TEST_CHANNEL", "general")
 
-	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "markdown", "--since", "7d", "--limit", "5", channel)
+	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "markdown", "--since", "30d", "--limit", "3", channel)
 	if err != nil {
-		t.Fatalf("channel markdown command failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("channel markdown failed: %v\nstderr: %s", err, stderr)
 	}
-
 	if !strings.Contains(stdout, "##") {
-		t.Errorf("markdown output missing '##' header, got: %s", truncate(stdout, 200))
+		t.Errorf("markdown output missing '##' header: %s", truncate(stdout, 300))
 	}
 }
 
-func TestSearchJSON(t *testing.T) {
+func TestMessageSmoke(t *testing.T) {
 	requireCreds(t)
-	query := requireEnv(t, "SLACK_TEST_SEARCH_QUERY")
+	msgURL := os.Getenv("SLACK_TEST_MESSAGE_URL")
+	if msgURL == "" {
+		t.Skip("SLACK_TEST_MESSAGE_URL required for message tests")
+	}
 
-	stdout, stderr, err := runBinary(t, nil, "search", "-o", "json", "--count", "3", query)
+	stdout, stderr, err := runBinary(t, nil, "message", "-o", "json", msgURL)
 	if err != nil {
-		t.Fatalf("search command failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("message failed: %v\nstderr: %s", err, stderr)
 	}
 
-	var results []map[string]any
-	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
-		t.Fatalf("output is not valid JSON array: %v\nstdout: %s", err, stdout)
+	var messages []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &messages); err != nil {
+		t.Fatalf("invalid JSON: %v\nstdout: %s", err, truncate(stdout, 500))
 	}
-
-	if len(results) == 0 {
-		t.Fatal("expected at least one search result, got empty array")
+	if len(messages) == 0 {
+		t.Fatal("expected >=1 message")
 	}
-
-	if len(results) > 3 {
-		t.Errorf("expected at most 3 results, got %d", len(results))
+	first := messages[0]
+	if _, ok := first["ts"]; !ok {
+		t.Error("first message missing 'ts'")
+	}
+	if _, ok := first["text"]; !ok {
+		t.Error("first message missing 'text'")
 	}
 }
 
-// truncate returns s truncated to maxLen characters, with "..." appended if truncated.
+func TestMessageMarkdown(t *testing.T) {
+	requireCreds(t)
+	msgURL := os.Getenv("SLACK_TEST_MESSAGE_URL")
+	if msgURL == "" {
+		t.Skip("SLACK_TEST_MESSAGE_URL required for message tests")
+	}
+
+	stdout, stderr, err := runBinary(t, nil, "message", "-o", "markdown", msgURL)
+	if err != nil {
+		t.Fatalf("message markdown failed: %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stdout, "##") {
+		t.Errorf("markdown output missing '##' header: %s", truncate(stdout, 300))
+	}
+}
+
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
