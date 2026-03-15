@@ -57,7 +57,7 @@ func ResolveChannel(client *api.Client, nameOrID string) (string, error) {
 // matches the given name, returning its "id" or empty string if not found.
 func findChannelByName(channels []map[string]any, name string) string {
 	for _, ch := range channels {
-		if n, _ := ch["name"].(string); n == name {
+		if n, _ := ch["name"].(string); strings.EqualFold(n, name) {
 			if id, _ := ch["id"].(string); id != "" {
 				return id
 			}
