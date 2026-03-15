@@ -3,12 +3,15 @@ package users
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
@@ -518,5 +521,87 @@ func TestResolveUsers_DoesNotMutateInput(t *testing.T) {
 	}
 	if result[0]["user"] != "Grace" {
 		t.Errorf("resolved message should have Grace, got %v", result[0]["user"])
+	}
+}
+
+func TestResolveUsers_ConcurrentFetch(t *testing.T) {
+	// Verify that user fetches happen concurrently by introducing a delay
+	// per request. With 10 users and 50ms delay each, sequential would take
+	// ~500ms. With 5 concurrent workers it should take ~100ms (2 batches).
+	// We allow up to 300ms to account for CI variability.
+	const (
+		numUsers     = 10
+		requestDelay = 50 * time.Millisecond
+	)
+
+	var inflight atomic.Int32
+	var maxInflight atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		uid := r.FormValue("user")
+
+		cur := inflight.Add(1)
+		// Track the maximum number of concurrent requests.
+		for {
+			old := maxInflight.Load()
+			if cur <= old || maxInflight.CompareAndSwap(old, cur) {
+				break
+			}
+		}
+
+		time.Sleep(requestDelay)
+		inflight.Add(-1)
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"user": map[string]any{
+				"real_name": "User_" + uid,
+				"name":      uid,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := api.NewClient("xoxc-test", "xoxd-test", api.WithBaseURL(srv.URL))
+	resolver := &UserResolver{
+		client:    client,
+		cachePath: filepath.Join(t.TempDir(), "users.json"),
+	}
+
+	messages := make([]map[string]any, numUsers)
+	for i := range numUsers {
+		messages[i] = map[string]any{
+			"user": fmt.Sprintf("U_CONC_%d", i),
+			"text": fmt.Sprintf("msg %d", i),
+		}
+	}
+
+	start := time.Now()
+	result, err := resolver.ResolveUsers(messages)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All users should be resolved.
+	for i, m := range result {
+		expected := fmt.Sprintf("User_U_CONC_%d", i)
+		if m["user"] != expected {
+			t.Errorf("result[%d][\"user\"] = %v, want %s", i, m["user"], expected)
+		}
+	}
+
+	// Sequential would be numUsers * requestDelay = 500ms.
+	// With concurrency limit 5, we expect ~2 batches = ~100ms.
+	// Use a generous upper bound of 300ms to avoid flakes.
+	sequentialTime := time.Duration(numUsers) * requestDelay
+	if elapsed >= sequentialTime {
+		t.Errorf("resolution took %v, which is >= sequential estimate of %v; expected parallelism", elapsed, sequentialTime)
+	}
+
+	// Verify that we actually had concurrent inflight requests.
+	if peak := maxInflight.Load(); peak < 2 {
+		t.Errorf("max inflight requests = %d, expected at least 2 for concurrent execution", peak)
 	}
 }
