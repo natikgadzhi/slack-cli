@@ -163,10 +163,8 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	// Write per-item files if --output-dir is set.
 	// For the channel command, each message gets its own file.
 	if OutputDir != "" {
-		channelName := nameOrID
-		// If nameOrID looks like a channel ID (starts with C/G), use it as the ID context.
-		// Otherwise, it's already a name.
-		if err := writeItemFiles(OutputDir, "channels", formatted, channelID, channelName); err != nil {
+		// Use the original input as channel name context (falls back to channelID inside writeItemFiles).
+		if err := writeItemFiles(OutputDir, "channels", formatted, channelID, nameOrID); err != nil {
 			return fmt.Errorf("writing output files: %w", err)
 		}
 	}
