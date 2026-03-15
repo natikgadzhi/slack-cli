@@ -3,12 +3,16 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/config"
@@ -55,22 +59,33 @@ func (r *UserResolver) ResolveUsers(messages []map[string]any) ([]map[string]any
 		}
 	}
 
-	// Fetch each unknown user and update the cache.
+	// Fetch unknown users concurrently with bounded parallelism.
 	// If the API fails and returns the raw UID, we still use it for this
 	// batch (so the user field gets a value) but we don't persist it in
 	// the cache, allowing a retry on the next invocation.
 	dirty := false
 	failedUIDs := make(map[string]string) // uid -> uid (for current batch only)
+	var mu sync.Mutex
+
+	g, _ := errgroup.WithContext(context.Background())
+	g.SetLimit(5)
+
 	for uid := range unknown {
-		name := r.fetchDisplayName(uid)
-		if name == uid {
-			// Transient failure or unknown user — don't cache.
-			failedUIDs[uid] = uid
-		} else {
-			cache[uid] = name
-			dirty = true
-		}
+		g.Go(func() error {
+			name := r.fetchDisplayName(uid)
+			mu.Lock()
+			defer mu.Unlock()
+			if name == uid {
+				// Transient failure or unknown user — don't cache.
+				failedUIDs[uid] = uid
+			} else {
+				cache[uid] = name
+				dirty = true
+			}
+			return nil
+		})
 	}
+	_ = g.Wait()
 
 	if dirty {
 		if err := r.saveCache(cache); err != nil {
