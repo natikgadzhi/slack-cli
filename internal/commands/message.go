@@ -74,6 +74,12 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
+	// Get team URL for building permalinks.
+	teamURL, teamErr := client.GetTeamURL()
+	if teamErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
+	}
+
 	// Cache the result (best-effort).
 	c := getCache()
 	cacheSlug := cache.MessageSlug(channelID, fetchTS)
@@ -83,7 +89,13 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		// Thread: render all messages.
 		formatted := make([]formatting.Message, 0, len(messages))
 		for _, m := range messages {
-			formatted = append(formatted, formatting.FormatMessage(m))
+			msg := formatting.FormatMessage(m)
+			if teamErr == nil {
+				if ts, ok := m["ts"].(string); ok && ts != "" {
+					msg.Link = formatting.BuildPermalink(teamURL, channelID, ts)
+				}
+			}
+			formatted = append(formatted, msg)
 		}
 		if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
 			return err
@@ -95,6 +107,11 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	} else {
 		// Single message.
 		formatted := formatting.FormatMessage(messages[0])
+		if teamErr == nil {
+			if ts, ok := messages[0]["ts"].(string); ok && ts != "" {
+				formatted.Link = formatting.BuildPermalink(teamURL, channelID, ts)
+			}
+		}
 		if err := output.RenderSingle(os.Stdout, formatted, format); err != nil {
 			return err
 		}
