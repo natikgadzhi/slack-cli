@@ -161,6 +161,35 @@ func TestResolveChannel_NameFoundSecondPage(t *testing.T) {
 	}
 }
 
+func TestResolveChannel_EmptyInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("should not call API for empty input")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+
+	// Empty string should return an error.
+	_, err := ResolveChannel(client, "")
+	if err == nil {
+		t.Fatal("expected error for empty input")
+	}
+	if !strings.Contains(err.Error(), "channel name or ID required") {
+		t.Errorf("expected 'channel name or ID required' in error, got: %v", err)
+	}
+
+	// Just a "#" should also return an error (becomes empty after trimming).
+	_, err = ResolveChannel(client, "#")
+	if err == nil {
+		t.Fatal("expected error for '#' input")
+	}
+	if !strings.Contains(err.Error(), "channel name or ID required") {
+		t.Errorf("expected 'channel name or ID required' in error, got: %v", err)
+	}
+}
+
 func TestResolveChannel_NameNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := map[string]any{

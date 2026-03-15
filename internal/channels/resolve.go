@@ -2,6 +2,7 @@
 package channels
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -17,50 +18,50 @@ var channelIDPattern = regexp.MustCompile(`^[A-Z0-9]{8,}$`)
 // returned as-is. Otherwise, conversations.list is paginated to find a channel
 // whose name matches.
 func ResolveChannel(client *api.Client, nameOrID string) (string, error) {
-	nameOrID = strings.TrimLeft(nameOrID, "#")
+	nameOrID = strings.TrimPrefix(nameOrID, "#")
+
+	if nameOrID == "" {
+		return "", fmt.Errorf("channel name or ID required")
+	}
 
 	if channelIDPattern.MatchString(nameOrID) {
 		return nameOrID, nil
 	}
 
-	var cursor string
-	for {
-		params := map[string]string{
-			"limit":            "200",
-			"exclude_archived": "true",
-			"types":            "public_channel,private_channel,mpim,im",
-		}
-		if cursor != "" {
-			params["cursor"] = cursor
-		}
+	params := map[string]string{
+		"limit":            "200",
+		"exclude_archived": "true",
+		"types":            "public_channel,private_channel,mpim,im",
+	}
 
-		resp, err := client.Call("conversations.list", params)
-		if err != nil {
-			return "", fmt.Errorf("listing channels: %w", err)
-		}
-
-		channels, _ := resp["channels"].([]any)
-		for _, ch := range channels {
-			chMap, ok := ch.(map[string]any)
-			if !ok {
-				continue
-			}
-			if name, _ := chMap["name"].(string); name == nameOrID {
-				id, _ := chMap["id"].(string)
-				if id != "" {
-					return id, nil
-				}
+	channels, err := client.CallPaginated("conversations.list", params, "next_cursor", "channels")
+	if err != nil {
+		// On rate limit, search partial results before giving up.
+		var rlErr *api.RateLimitError
+		if errors.As(err, &rlErr) {
+			if id := findChannelByName(channels, nameOrID); id != "" {
+				return id, nil
 			}
 		}
+		return "", fmt.Errorf("listing channels: %w", err)
+	}
 
-		// Check for next cursor in response_metadata.
-		meta, _ := resp["response_metadata"].(map[string]any)
-		nextCursor, _ := meta["next_cursor"].(string)
-		if nextCursor == "" {
-			break
-		}
-		cursor = nextCursor
+	if id := findChannelByName(channels, nameOrID); id != "" {
+		return id, nil
 	}
 
 	return "", fmt.Errorf("channel not found: %q", nameOrID)
+}
+
+// findChannelByName searches a slice of channel maps for one whose "name"
+// matches the given name, returning its "id" or empty string if not found.
+func findChannelByName(channels []map[string]any, name string) string {
+	for _, ch := range channels {
+		if n, _ := ch["name"].(string); n == name {
+			if id, _ := ch["id"].(string); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
 }
