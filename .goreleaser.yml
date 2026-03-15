@@ -42,7 +42,7 @@ release:
 brews:
   - repository:
       owner: natikgadzhi
-      name: taps
+      name: homebrew-taps
       # Use a dedicated PAT with write access to the taps repo.
       # The default GITHUB_TOKEN cannot push to a different repository.
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
