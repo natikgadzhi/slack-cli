@@ -82,3 +82,51 @@ func TestGetXoxd_KeychainFallback(t *testing.T) {
 		t.Errorf("GetXoxd = %q, want %q", token, "xoxd-test-token-123")
 	}
 }
+
+func TestGetXoxd_KeychainError(t *testing.T) {
+	t.Setenv("SLACK_XOXD", "")
+	os.Unsetenv("SLACK_XOXD")
+
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_get_failure")
+
+	_, err := GetXoxd()
+	if err == nil {
+		t.Fatal("GetXoxd should have returned an error when keychain fails")
+	}
+}
+
+func TestGetXoxc_EnvVarPriority(t *testing.T) {
+	// Env var should take priority even when keychain would succeed.
+	t.Setenv("SLACK_XOXC", "xoxc-env-priority")
+
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_get_success")
+
+	token, err := GetXoxc()
+	if err != nil {
+		t.Fatalf("GetXoxc returned unexpected error: %v", err)
+	}
+	if token != "xoxc-env-priority" {
+		t.Errorf("GetXoxc = %q, want %q — env var should take priority over keychain", token, "xoxc-env-priority")
+	}
+}
+
+func TestGetXoxd_EnvVarPriority(t *testing.T) {
+	// Env var should take priority even when keychain would succeed.
+	t.Setenv("SLACK_XOXD", "xoxd-env-priority")
+
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+	execCommand = fakeExecCommand("keychain_get_success_xoxd")
+
+	token, err := GetXoxd()
+	if err != nil {
+		t.Fatalf("GetXoxd returned unexpected error: %v", err)
+	}
+	if token != "xoxd-env-priority" {
+		t.Errorf("GetXoxd = %q, want %q — env var should take priority over keychain", token, "xoxd-env-priority")
+	}
+}

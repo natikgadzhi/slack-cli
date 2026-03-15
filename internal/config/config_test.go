@@ -171,3 +171,34 @@ func TestUserCachePathRespectsDataDirOverride(t *testing.T) {
 		t.Errorf("UserCachePath() = %q, want %q", got, want)
 	}
 }
+
+// --- UserCachePath takes priority over DataDir when both set ---
+
+func TestUserCachePathOverrideTakesPriorityOverDataDir(t *testing.T) {
+	t.Setenv("SLACK_USER_CACHE", "/tmp/explicit-users.json")
+	t.Setenv("SLACK_DATA_DIR", "/tmp/should-be-ignored")
+	got, err := UserCachePath()
+	if err != nil {
+		t.Fatalf("UserCachePath() returned unexpected error: %v", err)
+	}
+	if got != "/tmp/explicit-users.json" {
+		t.Errorf("UserCachePath() = %q, want %q — SLACK_USER_CACHE should take priority over SLACK_DATA_DIR", got, "/tmp/explicit-users.json")
+	}
+}
+
+// --- CacheDir with env override returns same as DataDir override ---
+
+func TestCacheDirOverrideSameAsDataDir(t *testing.T) {
+	t.Setenv("SLACK_DATA_DIR", "/tmp/slack-shared")
+	d, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error: %v", err)
+	}
+	c, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error: %v", err)
+	}
+	if d != c {
+		t.Errorf("DataDir()=%q and CacheDir()=%q should be equal when SLACK_DATA_DIR is set", d, c)
+	}
+}

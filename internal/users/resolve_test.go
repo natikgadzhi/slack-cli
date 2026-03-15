@@ -58,6 +58,23 @@ func newTestResolver(t *testing.T, users map[string]string) (*UserResolver, *htt
 	return resolver, srv
 }
 
+func TestNewUserResolver(t *testing.T) {
+	// Use SLACK_USER_CACHE env var to avoid depending on real home dir.
+	t.Setenv("SLACK_USER_CACHE", filepath.Join(t.TempDir(), "test-users.json"))
+
+	client := api.NewClient("xoxc-test", "xoxd-test")
+	resolver, err := NewUserResolver(client)
+	if err != nil {
+		t.Fatalf("NewUserResolver returned unexpected error: %v", err)
+	}
+	if resolver == nil {
+		t.Fatal("expected non-nil resolver")
+	}
+	if resolver.client != client {
+		t.Error("resolver should use the provided client")
+	}
+}
+
 func TestResolveUsers_AllCached(t *testing.T) {
 	// Pre-populate cache; expect zero API calls.
 	resolver, srv := newTestResolver(t, nil)
@@ -301,6 +318,182 @@ func TestResolveUsers_PrefersDisplayName(t *testing.T) {
 	}
 	if result[1]["user"] != "Real Name Only" {
 		t.Errorf("expected 'Real Name Only', got %v", result[1]["user"])
+	}
+}
+
+func TestResolveUsers_CorruptCacheStartsFresh(t *testing.T) {
+	apiUsers := map[string]string{
+		"U111": "Alice",
+	}
+	resolver, _ := newTestResolver(t, apiUsers)
+
+	// Write corrupt data to the cache file.
+	os.WriteFile(resolver.cachePath, []byte("this is not JSON!!!"), 0o644)
+
+	messages := []map[string]any{
+		{"user": "U111", "text": "hello"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should still resolve via API since corrupt cache is discarded.
+	if result[0]["user"] != "Alice" {
+		t.Errorf("expected Alice, got %v", result[0]["user"])
+	}
+}
+
+func TestResolveUsers_FallsBackToName(t *testing.T) {
+	// User with only "name" field (no display_name, no real_name).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		uid := r.FormValue("user")
+		if uid == "U_NAME_ONLY" {
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok": true,
+				"user": map[string]any{
+					"name": "just_username",
+				},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "user_not_found"})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := api.NewClient("xoxc-test", "xoxd-test", api.WithBaseURL(srv.URL))
+	resolver := &UserResolver{
+		client:    client,
+		cachePath: filepath.Join(t.TempDir(), "users.json"),
+	}
+
+	messages := []map[string]any{
+		{"user": "U_NAME_ONLY", "text": "hi"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0]["user"] != "just_username" {
+		t.Errorf("expected 'just_username', got %v", result[0]["user"])
+	}
+}
+
+func TestResolveUsers_DeduplicatesUnknownUIDs(t *testing.T) {
+	// Two messages from the same unknown user should only trigger one API call.
+	var apiCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		apiCalls++
+		uid := r.FormValue("user")
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"user": map[string]any{
+				"real_name": "User_" + uid,
+				"name":      uid,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := api.NewClient("xoxc-test", "xoxd-test", api.WithBaseURL(srv.URL))
+	resolver := &UserResolver{
+		client:    client,
+		cachePath: filepath.Join(t.TempDir(), "users.json"),
+	}
+
+	messages := []map[string]any{
+		{"user": "U_DUP", "text": "msg 1"},
+		{"user": "U_DUP", "text": "msg 2"},
+		{"user": "U_DUP", "text": "msg 3"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if apiCalls != 1 {
+		t.Errorf("expected 1 API call for deduplicated UID, got %d", apiCalls)
+	}
+
+	for i, m := range result {
+		if m["user"] != "User_U_DUP" {
+			t.Errorf("result[%d][\"user\"] = %v, want User_U_DUP", i, m["user"])
+		}
+	}
+}
+
+func TestResolveUsers_EmptyMessages(t *testing.T) {
+	resolver, _ := newTestResolver(t, nil)
+
+	result, err := resolver.ResolveUsers([]map[string]any{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(result))
+	}
+}
+
+func TestResolveUsers_NilMessages(t *testing.T) {
+	resolver, _ := newTestResolver(t, nil)
+
+	result, err := resolver.ResolveUsers(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(result))
+	}
+}
+
+func TestResolveUsers_CacheFileInNestedDir(t *testing.T) {
+	apiUsers := map[string]string{
+		"U_NESTED": "NestedUser",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		uid := r.FormValue("user")
+		name, ok := apiUsers[uid]
+		if !ok {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "user_not_found"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":   true,
+			"user": map[string]any{"real_name": name, "name": uid},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := api.NewClient("xoxc-test", "xoxd-test", api.WithBaseURL(srv.URL))
+
+	// Use a cache path in a nested directory that doesn't exist yet.
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "nested", "deep", "users.json")
+	resolver := &UserResolver{
+		client:    client,
+		cachePath: cachePath,
+	}
+
+	messages := []map[string]any{
+		{"user": "U_NESTED", "text": "test"},
+	}
+
+	result, err := resolver.ResolveUsers(messages)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0]["user"] != "NestedUser" {
+		t.Errorf("expected NestedUser, got %v", result[0]["user"])
+	}
+
+	// Verify cache file was created in nested directory.
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("cache file should exist in nested dir: %v", err)
 	}
 }
 
