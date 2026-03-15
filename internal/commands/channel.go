@@ -81,6 +81,17 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		params["latest"] = untilStr
 	}
 
+	// Start team URL fetch concurrently — it's independent of the message fetch.
+	type teamURLResult struct {
+		url string
+		err error
+	}
+	teamCh := make(chan teamURLResult, 1)
+	go func() {
+		u, err := client.GetTeamURL()
+		teamCh <- teamURLResult{u, err}
+	}()
+
 	// Fetch messages with progress indicator.
 	// Manual pagination loop (instead of CallPaginated) to show progress on stderr.
 	var allMessages []map[string]any
@@ -128,8 +139,10 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
-	// Get team URL for building permalinks.
-	teamURL, teamErr := client.GetTeamURL()
+	// Collect the team URL result (goroutine already running since before pagination).
+	teamResult := <-teamCh
+	teamURL := teamResult.url
+	teamErr := teamResult.err
 	if teamErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}

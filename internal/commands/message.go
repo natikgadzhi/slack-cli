@@ -50,6 +50,17 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		fetchTS = threadTS
 	}
 
+	// Start team URL fetch concurrently — it's independent of the message fetch.
+	type teamURLResult struct {
+		url string
+		err error
+	}
+	teamCh := make(chan teamURLResult, 1)
+	go func() {
+		u, err := client.GetTeamURL()
+		teamCh <- teamURLResult{u, err}
+	}()
+
 	// Fetch the message/thread via conversations.replies.
 	result, err := client.Call("conversations.replies", map[string]string{
 		"channel": channelID,
@@ -72,8 +83,10 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
-	// Get team URL for building permalinks.
-	teamURL, teamErr := client.GetTeamURL()
+	// Collect the team URL result (goroutine already running since before the fetch).
+	teamResult := <-teamCh
+	teamURL := teamResult.url
+	teamErr := teamResult.err
 	if teamErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}
