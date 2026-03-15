@@ -1,0 +1,32 @@
+name: E2E Smoke Tests
+
+# Manual trigger only — these hit the real Slack API.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run E2E tests
+        env:
+          # Tokens — stored as repository secrets, auto-masked in logs.
+          SLACK_XOXC: ${{ secrets.SLACK_XOXC }}
+          SLACK_XOXD: ${{ secrets.SLACK_XOXD }}
+          # Test data — non-sensitive, stored as repository variables.
+          SLACK_TEAM_URL: ${{ vars.SLACK_TEAM_URL }}
+          SLACK_TEST_CHANNEL: ${{ vars.SLACK_TEST_CHANNEL }}
+          SLACK_TEST_MESSAGE_URL: ${{ secrets.SLACK_TEST_MESSAGE_URL }}
+          SLACK_TEST_SEARCH_QUERY: ${{ vars.SLACK_TEST_SEARCH_QUERY }}
+        run: go test -tags e2e -v -timeout 120s ./tests/
