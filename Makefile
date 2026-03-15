@@ -3,8 +3,10 @@
 BINARY_NAME := slack-cli
 BUILD_DIR := .
 
+VERSION ?= dev
+
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/slack-cli
+	go build -ldflags "-X github.com/natikgadzhi/slack-cli/internal/commands.Version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/slack-cli
 
 test:
 	go test ./...

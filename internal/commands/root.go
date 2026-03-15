@@ -5,6 +5,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is set at build time via ldflags.
+var Version = "dev"
+
 // Persistent flag values accessible to subcommands.
 var (
 	OutputFormat string
@@ -16,7 +19,8 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "slack-cli",
 	Short: "Slack read-only CLI",
-	Long:  "Slack read-only CLI for fetching messages, threads, and history.",
+	Long:    "Slack read-only CLI for fetching messages, threads, and history.",
+	Version: Version,
 }
 
 func init() {
