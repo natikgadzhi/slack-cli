@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
@@ -81,8 +82,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fetch messages with progress indicator.
-	// We use a manual pagination loop instead of CallPaginated so we can
-	// show progress on stderr.
+	// Manual pagination loop (instead of CallPaginated) to show progress on stderr.
 	var allMessages []map[string]any
 	pageParams := make(map[string]string, len(params))
 	for k, v := range params {
@@ -98,24 +98,11 @@ func runChannel(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("fetching channel history: %w", err)
 		}
 
-		messages := extractMessagesFromResponse(result)
+		messages := api.ExtractItems(result, "messages")
 		allMessages = append(allMessages, messages...)
 
-		// Check for next cursor.
-		cursor := ""
-		if meta, ok := result["response_metadata"].(map[string]any); ok {
-			if c, ok := meta["next_cursor"].(string); ok && c != "" {
-				cursor = c
-			}
-		}
-
-		if cursor == "" {
-			break
-		}
-
-		// Check if we already have enough messages (Slack may return more
-		// than requested across pages, but we honor the limit flag).
-		if len(allMessages) >= limit {
+		cursor := api.ExtractNextCursor(result, "next_cursor")
+		if cursor == "" || len(allMessages) >= limit {
 			break
 		}
 
@@ -147,27 +134,15 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}
 
-	// Format messages with permalinks.
-	formatted := make([]formatting.Message, 0, len(allMessages))
-	for _, m := range allMessages {
-		msg := formatting.FormatMessage(m)
-		if teamErr == nil {
-			if ts, ok := m["ts"].(string); ok && ts != "" {
-				msg.Link = formatting.BuildPermalink(teamURL, channelID, ts)
-			}
-		}
-		formatted = append(formatted, msg)
-	}
-
-	// Render output.
+	// Format and render.
+	formatted := formatMessages(allMessages, teamURL, channelID, teamErr == nil)
 	if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
 		return err
 	}
 
 	// Cache the result (best-effort).
-	c := getCache()
 	cacheSlug := cache.ChannelHistorySlug(channelID, sinceStr, untilStr)
-	cacheWrite(c, "channel", cacheSlug, formatted, cache.Metadata{
+	cacheWrite(getCache(), "channel", cacheSlug, formatted, cache.Metadata{
 		Command: fmt.Sprintf("channel %s --since %s --until %s --limit %d", nameOrID, since, until, limit),
 	})
 

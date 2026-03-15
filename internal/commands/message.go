@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	"github.com/natikgadzhi/slack-cli/internal/output"
@@ -50,18 +51,16 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fetch the message/thread via conversations.replies.
-	params := map[string]string{
+	result, err := client.Call("conversations.replies", map[string]string{
 		"channel": channelID,
 		"ts":      fetchTS,
 		"limit":   "200",
-	}
-
-	result, err := client.Call("conversations.replies", params)
+	})
 	if err != nil {
 		return fmt.Errorf("fetching message: %w", err)
 	}
 
-	messages := extractMessagesFromResponse(result)
+	messages := api.ExtractItems(result, "messages")
 	if len(messages) == 0 {
 		fmt.Fprintln(os.Stderr, "no messages found")
 		return nil
@@ -70,7 +69,6 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	// Resolve user IDs to display names.
 	messages, err = resolver.ResolveUsers(messages)
 	if err != nil {
-		// User resolution failure is non-fatal; log and continue with raw UIDs.
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
@@ -80,46 +78,18 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}
 
-	// Cache the result (best-effort).
-	c := getCache()
-	cacheSlug := cache.MessageSlug(channelID, fetchTS)
-
-	// Format and render.
-	if threadTS != "" || len(messages) > 1 {
-		// Thread: render all messages.
-		formatted := make([]formatting.Message, 0, len(messages))
-		for _, m := range messages {
-			msg := formatting.FormatMessage(m)
-			if teamErr == nil {
-				if ts, ok := m["ts"].(string); ok && ts != "" {
-					msg.Link = formatting.BuildPermalink(teamURL, channelID, ts)
-				}
-			}
-			formatted = append(formatted, msg)
-		}
-		if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
-			return err
-		}
-		cacheWrite(c, "message", cacheSlug, formatted, cache.Metadata{
-			SourceURL: rawURL,
-			Command:   fmt.Sprintf("message %s", rawURL),
-		})
-	} else {
-		// Single message.
-		formatted := formatting.FormatMessage(messages[0])
-		if teamErr == nil {
-			if ts, ok := messages[0]["ts"].(string); ok && ts != "" {
-				formatted.Link = formatting.BuildPermalink(teamURL, channelID, ts)
-			}
-		}
-		if err := output.RenderSingle(os.Stdout, formatted, format); err != nil {
-			return err
-		}
-		cacheWrite(c, "message", cacheSlug, formatted, cache.Metadata{
-			SourceURL: rawURL,
-			Command:   fmt.Sprintf("message %s", rawURL),
-		})
+	// Format and render (always as a list — single message is just len=1).
+	formatted := formatMessages(messages, teamURL, channelID, teamErr == nil)
+	if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
+		return err
 	}
+
+	// Cache the result (best-effort).
+	cacheSlug := cache.MessageSlug(channelID, fetchTS)
+	cacheWrite(getCache(), "message", cacheSlug, formatted, cache.Metadata{
+		SourceURL: rawURL,
+		Command:   fmt.Sprintf("message %s", rawURL),
+	})
 
 	return nil
 }

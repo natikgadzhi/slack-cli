@@ -170,12 +170,12 @@ func (c *Client) CallPaginated(endpoint string, params map[string]string, cursor
 		}
 
 		// Extract the collected items.
-		items := extractItems(result, collectKey)
+		items := ExtractItems(result, collectKey)
 		all = append(all, items...)
 
 		// Check for next cursor using the specified cursorKey
 		// (e.g. "next_cursor" for standard Slack pagination).
-		cursor := extractNextCursor(result, cursorKey)
+		cursor := ExtractNextCursor(result, cursorKey)
 		if cursor == "" {
 			break
 		}
@@ -262,8 +262,8 @@ func asRateLimitError(err error) (*RateLimitError, bool) {
 	return nil, false
 }
 
-// extractItems pulls a slice of objects from result[collectKey].
-func extractItems(result map[string]any, collectKey string) []map[string]any {
+// ExtractItems pulls a slice of objects from result[collectKey].
+func ExtractItems(result map[string]any, collectKey string) []map[string]any {
 	raw, ok := result[collectKey]
 	if !ok {
 		return nil
@@ -272,7 +272,7 @@ func extractItems(result map[string]any, collectKey string) []map[string]any {
 	if !ok {
 		return nil
 	}
-	var items []map[string]any
+	items := make([]map[string]any, 0, len(arr))
 	for _, elem := range arr {
 		if m, ok := elem.(map[string]any); ok {
 			items = append(items, m)
@@ -281,10 +281,10 @@ func extractItems(result map[string]any, collectKey string) []map[string]any {
 	return items
 }
 
-// extractNextCursor reads the cursor from response_metadata in a Slack API response.
+// ExtractNextCursor reads the cursor from response_metadata in a Slack API response.
 // cursorKey specifies which field to look up inside response_metadata (e.g.
 // "next_cursor"). Most Slack endpoints use "next_cursor" by default.
-func extractNextCursor(result map[string]any, cursorKey string) string {
+func ExtractNextCursor(result map[string]any, cursorKey string) string {
 	meta, ok := result["response_metadata"]
 	if !ok {
 		return ""

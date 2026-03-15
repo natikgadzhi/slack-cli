@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -40,17 +41,15 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Call search.messages.
-	params := map[string]string{
+	result, err := client.Call("search.messages", map[string]string{
 		"query": query,
 		"count": strconv.Itoa(count),
-	}
-
-	result, err := client.Call("search.messages", params)
+	})
 	if err != nil {
 		return fmt.Errorf("searching messages: %w", err)
 	}
 
-	// Extract matches from messages.matches.
+	// Extract matches from the nested messages.matches structure.
 	matches := extractSearchMatches(result)
 	if len(matches) == 0 {
 		fmt.Fprintln(os.Stderr, "no results found")
@@ -66,7 +65,6 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			r["ts"] = ts
 		}
 
-		// Channel info may be nested under "channel".
 		if ch, ok := m["channel"].(map[string]any); ok {
 			if name, ok := ch["name"].(string); ok {
 				r["channel"] = name
@@ -100,9 +98,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cache the result (best-effort).
-	c := getCache()
 	cacheSlug := cache.SearchSlug(query)
-	cacheWrite(c, "search", cacheSlug, results, cache.Metadata{
+	cacheWrite(getCache(), "search", cacheSlug, results, cache.Metadata{
 		Command: fmt.Sprintf("search %q --count %d", query, count),
 	})
 
@@ -120,19 +117,5 @@ func extractSearchMatches(result map[string]any) []map[string]any {
 	if !ok {
 		return nil
 	}
-	matchesRaw, ok := messagesMap["matches"]
-	if !ok {
-		return nil
-	}
-	matchesArr, ok := matchesRaw.([]any)
-	if !ok {
-		return nil
-	}
-	var matches []map[string]any
-	for _, elem := range matchesArr {
-		if m, ok := elem.(map[string]any); ok {
-			matches = append(matches, m)
-		}
-	}
-	return matches
+	return api.ExtractItems(messagesMap, "matches")
 }

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -27,14 +28,14 @@ var authSetXoxcCmd = &cobra.Command{
 	Use:   "set-xoxc <token>",
 	Short: "Store xoxc token in the macOS Keychain",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runAuthSetXoxc,
+	RunE:  storeToken("xoxc token", config.KeychainXoxcService),
 }
 
 var authSetXoxdCmd = &cobra.Command{
 	Use:   "set-xoxd <token>",
 	Short: "Store xoxd cookie in the macOS Keychain",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runAuthSetXoxd,
+	RunE:  storeToken("xoxd cookie", config.KeychainXoxdService),
 }
 
 func init() {
@@ -81,7 +82,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	// auth.test failed. Print the error.
-	if apiErr, ok := isAPIError(err); ok {
+	if apiErr, ok := api.AsAPIError(err); ok {
 		fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
 	} else {
 		fmt.Fprintf(w, "[FAIL] %v\n", err)
@@ -104,7 +105,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 }
 
 // checkToken prints diagnostics about a single token to the given writer.
-func checkToken(w *os.File, name, token, expectedPrefix string) {
+func checkToken(w io.Writer, name, token, expectedPrefix string) {
 	clean, warnings := auth.SanitizeToken(token)
 
 	for _, warn := range warnings {
@@ -126,32 +127,19 @@ func checkToken(w *os.File, name, token, expectedPrefix string) {
 	}
 }
 
-// runAuthSetXoxc stores the xoxc token in the macOS Keychain.
-func runAuthSetXoxc(cmd *cobra.Command, args []string) error {
-	token, warnings := auth.SanitizeToken(args[0])
-	for _, warn := range warnings {
-		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
+// storeToken returns a RunE handler that sanitizes and stores a token in the Keychain.
+func storeToken(label string, serviceFn func() string) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		token, warnings := auth.SanitizeToken(args[0])
+		for _, warn := range warnings {
+			fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
+		}
+		service := serviceFn()
+		if err := auth.KeychainSet(service, token); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Stored %s in keychain (service=%q, account=%q)\n",
+			label, service, config.KeychainAccount())
+		return nil
 	}
-	service := config.KeychainXoxcService()
-	if err := auth.KeychainSet(service, token); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "Stored xoxc token in keychain (service=%q, account=%q)\n",
-		service, config.KeychainAccount())
-	return nil
-}
-
-// runAuthSetXoxd stores the xoxd cookie in the macOS Keychain.
-func runAuthSetXoxd(cmd *cobra.Command, args []string) error {
-	token, warnings := auth.SanitizeToken(args[0])
-	for _, warn := range warnings {
-		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
-	}
-	service := config.KeychainXoxdService()
-	if err := auth.KeychainSet(service, token); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "Stored xoxd cookie in keychain (service=%q, account=%q)\n",
-		service, config.KeychainAccount())
-	return nil
 }

@@ -2,35 +2,16 @@ package commands
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
+	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	"github.com/natikgadzhi/slack-cli/internal/output"
 	"github.com/natikgadzhi/slack-cli/internal/users"
 )
-
-// setupClient creates an API client and user resolver from the stored credentials.
-// This is the common setup pattern used by all data-fetching commands.
-func setupClient() (*api.Client, *users.UserResolver, error) {
-	xoxc, err := auth.GetXoxc()
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting xoxc token: %w", err)
-	}
-	xoxd, err := auth.GetXoxd()
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting xoxd cookie: %w", err)
-	}
-	client := api.NewClient(xoxc, xoxd)
-	resolver, err := users.NewUserResolver(client)
-	if err != nil {
-		return nil, nil, fmt.Errorf("creating user resolver: %w", err)
-	}
-	return client, resolver, nil
-}
 
 // setupClientOnly creates an API client from stored credentials without a user resolver.
 // Used by commands that don't need user resolution (e.g. search).
@@ -46,6 +27,19 @@ func setupClientOnly() (*api.Client, error) {
 	return api.NewClient(xoxc, xoxd), nil
 }
 
+// setupClient creates an API client and user resolver from the stored credentials.
+func setupClient() (*api.Client, *users.UserResolver, error) {
+	client, err := setupClientOnly()
+	if err != nil {
+		return nil, nil, err
+	}
+	resolver, err := users.NewUserResolver(client)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating user resolver: %w", err)
+	}
+	return client, resolver, nil
+}
+
 // parseOutputFormat parses the output format from the persistent flag.
 func parseOutputFormat() (output.Format, error) {
 	return output.ParseFormat(OutputFormat)
@@ -58,7 +52,6 @@ func getCache() *cache.Cache {
 	}
 	c, err := cache.NewCache()
 	if err != nil {
-		// Cache errors are not fatal; log to stderr and continue without cache.
 		fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
 		return nil
 	}
@@ -80,36 +73,22 @@ func cacheWrite(c *cache.Cache, objectType, slug string, data any, meta cache.Me
 	}
 }
 
-// clearProgress clears the stderr progress line by writing a carriage return
-// and enough spaces to overwrite it, then returns to the start of the line.
+// clearProgress clears the stderr progress line using ANSI escape (erase to end of line).
 func clearProgress() {
-	fmt.Fprintf(os.Stderr, "\r%80s\r", "")
+	fmt.Fprintf(os.Stderr, "\r\033[K")
 }
 
-// extractMessagesFromResponse extracts the "messages" slice from a Slack API response.
-func extractMessagesFromResponse(result map[string]any) []map[string]any {
-	raw, ok := result["messages"]
-	if !ok {
-		return nil
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-	var messages []map[string]any
-	for _, elem := range arr {
-		if m, ok := elem.(map[string]any); ok {
-			messages = append(messages, m)
+// formatMessages converts raw Slack messages to formatted Messages with permalinks.
+func formatMessages(messages []map[string]any, teamURL, channelID string, hasTeamURL bool) []formatting.Message {
+	formatted := make([]formatting.Message, 0, len(messages))
+	for _, m := range messages {
+		msg := formatting.FormatMessage(m)
+		if hasTeamURL {
+			if ts, ok := m["ts"].(string); ok && ts != "" {
+				msg.Link = formatting.BuildPermalink(teamURL, channelID, ts)
+			}
 		}
+		formatted = append(formatted, msg)
 	}
-	return messages
-}
-
-// isAPIError checks if an error is an api.APIError and returns it.
-func isAPIError(err error) (*api.APIError, bool) {
-	var apiErr *api.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr, true
-	}
-	return nil, false
+	return formatted
 }
