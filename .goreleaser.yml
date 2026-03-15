@@ -43,6 +43,9 @@ brews:
   - repository:
       owner: natikgadzhi
       name: taps
+      # Use a dedicated PAT with write access to the taps repo.
+      # The default GITHUB_TOKEN cannot push to a different repository.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/natikgadzhi/slack-cli"
     description: "Read-only Slack CLI for fetching messages, threads, and history"
