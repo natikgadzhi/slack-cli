@@ -104,6 +104,13 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		Command: fmt.Sprintf("search %q --count %d", query, count),
 	})
 
+	// Write per-item files if --output-dir is set.
+	if OutputDir != "" {
+		if err := writeSearchItemFiles(OutputDir, results, query); err != nil {
+			return fmt.Errorf("writing output files: %w", err)
+		}
+	}
+
 	return nil
 }
 

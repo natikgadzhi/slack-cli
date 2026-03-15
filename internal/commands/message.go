@@ -105,5 +105,13 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		Command:   fmt.Sprintf("message %s", rawURL),
 	})
 
+	// Write per-item files if --output-dir is set.
+	// For the message command, thread root + replies go into ONE file.
+	if OutputDir != "" {
+		if err := writeThreadFile(OutputDir, formatted, channelID, "", fetchTS, rawURL); err != nil {
+			return fmt.Errorf("writing output files: %w", err)
+		}
+	}
+
 	return nil
 }
