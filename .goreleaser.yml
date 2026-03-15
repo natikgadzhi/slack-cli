@@ -1,4 +1,5 @@
 version: 2
+project_name: slack-cli
 
 builds:
   - id: slack-cli
@@ -17,11 +18,13 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: darwin
+        format: zip
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: 'checksums.txt'
 
 changelog:
   sort: asc
@@ -30,3 +33,19 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
+
+release:
+  github:
+    owner: natikgadzhi
+    name: slack-cli
+
+brews:
+  - repository:
+      owner: natikgadzhi
+      name: taps
+    directory: Formula
+    homepage: "https://github.com/natikgadzhi/slack-cli"
+    description: "Read-only Slack CLI for fetching messages, threads, and history"
+    license: "MIT"
+    test: |
+      system "#{bin}/slack-cli", "--help"

@@ -7,10 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/config"
-	"github.com/spf13/cobra"
 )
 
 var authCmd = &cobra.Command{
@@ -53,7 +54,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	// Check xoxc token.
 	xoxc, xoxcErr := auth.GetXoxc()
 	if xoxcErr != nil {
-		fmt.Fprintf(w, "[FAIL] xoxc: %v\n", xoxcErr)
+		_, _ = fmt.Fprintf(w, "[FAIL] xoxc: %v\n", xoxcErr)
 	} else {
 		checkToken(w, "xoxc", xoxc, "xoxc-")
 	}
@@ -61,7 +62,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	// Check xoxd cookie.
 	xoxd, xoxdErr := auth.GetXoxd()
 	if xoxdErr != nil {
-		fmt.Fprintf(w, "[FAIL] xoxd: %v\n", xoxdErr)
+		_, _ = fmt.Fprintf(w, "[FAIL] xoxd: %v\n", xoxdErr)
 	} else {
 		checkToken(w, "xoxd", xoxd, "xoxd-")
 	}
@@ -77,15 +78,15 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		user, _ := result["user"].(string)
 		team, _ := result["team"].(string)
-		fmt.Fprintf(w, "[OK] authenticated as %s on %s\n", user, team)
+		_, _ = fmt.Fprintf(w, "[OK] authenticated as %s on %s\n", user, team)
 		return nil
 	}
 
 	// auth.test failed. Print the error.
 	if apiErr, ok := api.AsAPIError(err); ok {
-		fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
+		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
 	} else {
-		fmt.Fprintf(w, "[FAIL] %v\n", err)
+		_, _ = fmt.Fprintf(w, "[FAIL] %v\n", err)
 	}
 
 	// Try URL-decoded xoxd as fallback.
@@ -96,7 +97,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 		if err == nil {
 			user, _ := resultDecoded["user"].(string)
 			team, _ := resultDecoded["team"].(string)
-			fmt.Fprintf(w, "[OK] authenticated (url-decoded xoxd) as %s on %s\n", user, team)
+			_, _ = fmt.Fprintf(w, "[OK] authenticated (url-decoded xoxd) as %s on %s\n", user, team)
 			return nil
 		}
 	}
@@ -109,7 +110,7 @@ func checkToken(w io.Writer, name, token, expectedPrefix string) {
 	clean, warnings := auth.SanitizeToken(token)
 
 	for _, warn := range warnings {
-		fmt.Fprintf(w, "[WARN] %s: %s\n", name, warn)
+		_, _ = fmt.Fprintf(w, "[WARN] %s: %s\n", name, warn)
 	}
 
 	// Show first 20 chars and length.
@@ -117,13 +118,13 @@ func checkToken(w io.Writer, name, token, expectedPrefix string) {
 	if len(preview) > 20 {
 		preview = preview[:20]
 	}
-	fmt.Fprintf(w, "[INFO] %s: %s... (length %d)\n", name, preview, len(clean))
+	_, _ = fmt.Fprintf(w, "[INFO] %s: %s... (length %d)\n", name, preview, len(clean))
 
 	// Check expected prefix.
 	if !strings.HasPrefix(clean, expectedPrefix) {
-		fmt.Fprintf(w, "[WARN] %s: expected prefix %q not found\n", name, expectedPrefix)
+		_, _ = fmt.Fprintf(w, "[WARN] %s: expected prefix %q not found\n", name, expectedPrefix)
 	} else {
-		fmt.Fprintf(w, "[OK] %s: has expected prefix %q\n", name, expectedPrefix)
+		_, _ = fmt.Fprintf(w, "[OK] %s: has expected prefix %q\n", name, expectedPrefix)
 	}
 }
 
