@@ -52,7 +52,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve channel name to ID.
-	channelID, err := channels.ResolveChannel(client, nameOrID)
+	channelID, err := channels.ResolveChannel(client, nameOrID, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("resolving channel: %w", err)
 	}
