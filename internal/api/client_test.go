@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 )
 
 // newTestClient creates a Client pointing at the given test server URL
@@ -156,7 +158,7 @@ func TestCall_429ExhaustsRetries(t *testing.T) {
 	}
 }
 
-func TestCall_NonOKHTTPReturnsAPIError(t *testing.T) {
+func TestCall_NonOKHTTPReturnsCLIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal server error"))
@@ -169,15 +171,12 @@ func TestCall_NonOKHTTPReturnsAPIError(t *testing.T) {
 		t.Fatal("expected error for HTTP 500")
 	}
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T: %v", err, err)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected CLIError, got %T: %v", err, err)
 	}
-	if apiErr.Code != 500 {
-		t.Errorf("expected code 500, got %d", apiErr.Code)
-	}
-	if apiErr.Message != "internal server error" {
-		t.Errorf("unexpected message: %q", apiErr.Message)
+	if cliErr.Code != 500 {
+		t.Errorf("expected code 500, got %d", cliErr.Code)
 	}
 }
 
@@ -355,7 +354,7 @@ func TestBackoffDelay_Exponential(t *testing.T) {
 	}
 }
 
-func TestCall_OkFalseReturnsAPIError(t *testing.T) {
+func TestCall_OkFalseReturnsCLIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{
@@ -371,15 +370,15 @@ func TestCall_OkFalseReturnsAPIError(t *testing.T) {
 		t.Fatal("expected error for ok:false response")
 	}
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T: %v", err, err)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected CLIError, got %T: %v", err, err)
 	}
-	if apiErr.Code != 200 {
-		t.Errorf("expected code 200 (Slack returns 200 with ok:false), got %d", apiErr.Code)
+	if cliErr.Code != 200 {
+		t.Errorf("expected code 200 (Slack returns 200 with ok:false), got %d", cliErr.Code)
 	}
-	if apiErr.Message != "invalid_auth" {
-		t.Errorf("expected message 'invalid_auth', got %q", apiErr.Message)
+	if !strings.Contains(cliErr.Message, "invalid_auth") {
+		t.Errorf("expected message containing 'invalid_auth', got %q", cliErr.Message)
 	}
 }
 
@@ -398,12 +397,12 @@ func TestCall_OkFalseUnknownError(t *testing.T) {
 		t.Fatal("expected error for ok:false response without error field")
 	}
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T: %v", err, err)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected CLIError, got %T: %v", err, err)
 	}
-	if apiErr.Message != "unknown error" {
-		t.Errorf("expected message 'unknown error', got %q", apiErr.Message)
+	if !strings.Contains(cliErr.Message, "unknown error") {
+		t.Errorf("expected message containing 'unknown error', got %q", cliErr.Message)
 	}
 }
 
@@ -499,10 +498,9 @@ func TestCall_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestCall_LongErrorBodyTruncated(t *testing.T) {
+func TestCall_NonOKHTTPReturnsCLIErrorWithCode(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		// Write more than 300 chars.
 		w.Write([]byte(repeatStr("x", 500)))
 	}))
 	defer srv.Close()
@@ -512,12 +510,12 @@ func TestCall_LongErrorBodyTruncated(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for HTTP 502")
 	}
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T: %v", err, err)
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected CLIError, got %T: %v", err, err)
 	}
-	if len(apiErr.Message) > 300 {
-		t.Errorf("error message should be truncated to 300 chars, got %d", len(apiErr.Message))
+	if cliErr.Code != 502 {
+		t.Errorf("expected code 502, got %d", cliErr.Code)
 	}
 }
 

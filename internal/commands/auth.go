@@ -86,7 +86,9 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	// auth.test failed. Print the error.
-	if apiErr, ok := api.AsAPIError(err); ok {
+	if cliErr, ok := api.AsCLIError(err); ok {
+		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", cliErr.Message)
+	} else if apiErr, ok := api.AsAPIError(err); ok {
 		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
 	} else {
 		_, _ = fmt.Fprintf(w, "[FAIL] %v\n", err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/slack-cli/internal/api"
@@ -98,6 +99,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	prog := progress.NewCounter("Fetching messages", format)
 
 	var allMessages []map[string]any
+	var isPartial bool
 	pageParams := make(map[string]string, len(params))
 	for k, v := range params {
 		pageParams[k] = v
@@ -109,6 +111,19 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		result, err := client.Call("conversations.history", pageParams)
 		if err != nil {
 			prog.Finish()
+
+			// On rate limit with partial data, warn and render what we have.
+			if _, ok := api.AsRateLimitError(err); ok && len(allMessages) > 0 {
+				clierrors.PrintWarning(fmt.Sprintf("rate limited after fetching %d messages; showing partial results", len(allMessages)), output.IsJSON(format))
+				isPartial = true
+				break // fall through to render what we have
+			}
+
+			// For other CLI errors, print and exit with the right code.
+			if cliErr, ok := api.AsCLIError(err); ok {
+				clierrors.PrintError(cliErr, output.IsJSON(format))
+				os.Exit(cliErr.ExitCode)
+			}
 			return fmt.Errorf("fetching channel history: %w", err)
 		}
 
@@ -153,11 +168,18 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	formatted := formatMessages(allMessages, teamURL, channelID, teamErr == nil)
 
 	if output.IsJSON(format) {
-		if err := output.PrintJSON(formatted); err != nil {
-			return err
+		if isPartial {
+			pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
+			if err := output.PrintJSON(pr); err != nil {
+				return err
+			}
+		} else {
+			if err := output.PrintJSON(formatted); err != nil {
+				return err
+			}
 		}
 	} else {
-		// Table output: use table format for terminal
+		// Table output: use table format for terminal.
 		renderMessagesTable(formatted)
 	}
 
@@ -172,11 +194,15 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	if DerivedDir != "" {
 		// Use the original input as channel name context (falls back to channelID inside writeItemFiles).
 		if err := writeItemFiles(DerivedDir, formatted, channelID, nameOrID); err != nil {
-			return fmt.Errorf("writing output files: %w", err)
+			return fmt.Errorf("writing derived files: %w", err)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+	if isPartial {
+		fmt.Fprintf(os.Stderr, "Done. %d messages fetched (partial — rate limited).\n", len(formatted))
+	} else {
+		fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+	}
 	return nil
 }
 

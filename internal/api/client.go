@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 
@@ -111,11 +112,7 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			excerpt := string(respBody)
-			if len(excerpt) > 300 {
-				excerpt = excerpt[:300]
-			}
-			return nil, &APIError{Code: resp.StatusCode, Message: excerpt}
+			return nil, clierrors.HandleHTTPError(resp.StatusCode, endpoint, "slack-cli", c.checkAuth)
 		}
 
 		var result map[string]any
@@ -124,14 +121,16 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 		}
 
 		// Slack returns HTTP 200 with {"ok": false, "error": "..."} for
-		// auth failures, permission errors, etc. Detect this and return an APIError.
+		// auth failures, permission errors, etc. Detect this and return a CLIError.
 		if ok, exists := result["ok"]; exists {
 			if okBool, isBool := ok.(bool); isBool && !okBool {
 				errMsg := "unknown error"
 				if e, has := result["error"].(string); has {
 					errMsg = e
 				}
-				return nil, &APIError{Code: resp.StatusCode, Message: errMsg}
+				cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
+				cliErr.WithCode(resp.StatusCode)
+				return nil, cliErr
 			}
 		}
 
@@ -207,6 +206,21 @@ func (c *Client) GetTeamURL() (string, error) {
 		c.teamURL = strings.TrimRight(u, "/")
 	})
 	return c.teamURL, c.teamErr
+}
+
+// checkAuth verifies whether the current credentials are valid by calling
+// auth.test. Implements clierrors.AuthChecker for HandleHTTPError.
+func (c *Client) checkAuth() (bool, error) {
+	data, err := c.Call("auth.test", nil)
+	if err != nil {
+		return false, err
+	}
+	if ok, exists := data["ok"]; exists {
+		if okBool, isBool := ok.(bool); isBool {
+			return okBool, nil
+		}
+	}
+	return false, nil
 }
 
 // --- helpers ---

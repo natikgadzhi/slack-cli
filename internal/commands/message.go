@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
@@ -69,6 +70,10 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		"limit":   "200",
 	})
 	if err != nil {
+		if cliErr, ok := api.AsCLIError(err); ok {
+			clierrors.PrintError(cliErr, output.IsJSON(format))
+			os.Exit(cliErr.ExitCode)
+		}
 		return fmt.Errorf("fetching message: %w", err)
 	}
 
