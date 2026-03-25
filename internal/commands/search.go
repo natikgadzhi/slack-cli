@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
@@ -16,23 +17,49 @@ import (
 )
 
 var searchCmd = &cobra.Command{
-	Use:   "search <query>",
+	Use:   "search [query]",
 	Short: "Search Slack messages",
-	Args:  cobra.ExactArgs(1),
+	Args:  validateSearchArgs,
 	Example: `  slack-cli search "deployment failed" --limit 10
+  slack-cli search --from @alice "deployment"
+  slack-cli search --from @alice
+  slack-cli search --from @alice --sort recent
   slack-cli search "from:@alice" -o json | jq '.[].text'`,
 	RunE: runSearch,
 }
 
 func init() {
 	searchCmd.Flags().IntP("limit", "n", 20, "Maximum number of results")
+	searchCmd.Flags().String("from", "", "Filter messages from a specific user (handle or user ID)")
+	searchCmd.Flags().String("sort", "relevance", "Sort order: relevance or recent")
 	rootCmd.AddCommand(searchCmd)
+}
+
+// validateSearchArgs ensures that at least a query argument or the --from flag is provided.
+func validateSearchArgs(cmd *cobra.Command, args []string) error {
+	from, _ := cmd.Flags().GetString("from")
+	if len(args) == 0 && from == "" {
+		return fmt.Errorf("requires at least 1 arg or --from flag")
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("accepts at most 1 arg, received %d", len(args))
+	}
+	return nil
 }
 
 // runSearch searches Slack messages and renders the results.
 func runSearch(cmd *cobra.Command, args []string) error {
-	query := args[0]
+	from, _ := cmd.Flags().GetString("from")
+	sortFlag, _ := cmd.Flags().GetString("sort")
 	limit, _ := cmd.Flags().GetInt("limit")
+
+	var queryArg string
+	if len(args) > 0 {
+		queryArg = args[0]
+	}
+
+	query := buildSearchQuery(queryArg, from)
+	sortParam, sortDir := resolveSearchSort(sortFlag, queryArg, from)
 
 	format := output.Resolve(cmd)
 
@@ -46,11 +73,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	spinner := progress.NewSpinner("Searching", format)
 	spinner.Update(0)
 
-	// Call search.messages.
-	result, err := client.Call("search.messages", map[string]string{
+	// Build API params.
+	params := map[string]string{
 		"query": query,
 		"count": strconv.Itoa(limit),
-	})
+	}
+	if sortParam != "" {
+		params["sort"] = sortParam
+		params["sort_dir"] = sortDir
+	}
+
+	// Call search.messages.
+	result, err := client.Call("search.messages", params)
 
 	spinner.Finish()
 
@@ -128,6 +162,63 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// buildSearchQuery constructs the final query string for search.messages.
+// If from is set, it prepends a from: modifier to the query. If the from value
+// starts with "@", the prefix is stripped. If it looks like a user ID (starts
+// with "U" and is all alphanumeric), it is used as-is with from:<UID>.
+func buildSearchQuery(queryArg, from string) string {
+	var parts []string
+
+	if from != "" {
+		from = strings.TrimPrefix(from, "@")
+		if looksLikeUserID(from) {
+			parts = append(parts, "from:<"+from+">")
+		} else {
+			parts = append(parts, "from:"+from)
+		}
+	}
+
+	if queryArg != "" {
+		parts = append(parts, queryArg)
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// looksLikeUserID returns true if s starts with "U" and the rest is alphanumeric.
+// Slack user IDs have the form U[A-Z0-9]+.
+func looksLikeUserID(s string) bool {
+	if len(s) < 2 || s[0] != 'U' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveSearchSort determines the sort and sort_dir API params based on flags.
+// When --from is used without a query, the default sort switches to "recent".
+func resolveSearchSort(sortFlag, queryArg, from string) (sort, sortDir string) {
+	effective := sortFlag
+
+	// When --from is used without a query, default to recent sort
+	// (unless the user explicitly chose a sort).
+	if from != "" && queryArg == "" && effective == "relevance" {
+		effective = "recent"
+	}
+
+	switch effective {
+	case "recent":
+		return "timestamp", "desc"
+	default:
+		// "relevance" is Slack's default; no need to send sort params.
+		return "", ""
+	}
 }
 
 // extractSearchMatches pulls the matches array from a search.messages response.
