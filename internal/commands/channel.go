@@ -5,26 +5,32 @@ import (
 	"os"
 	"strconv"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
-	"github.com/natikgadzhi/slack-cli/internal/output"
+	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
 var channelCmd = &cobra.Command{
 	Use:   "channel <name|id>",
 	Short: "Fetch messages from a Slack channel",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runChannel,
+	Example: `  slack-cli channel general --since 2d --limit 100
+  slack-cli channel C12345678 --since 2026-03-01 --until 2026-03-10
+  slack-cli channel general -o json | jq '.[].text'`,
+	RunE: runChannel,
 }
 
 func init() {
-	channelCmd.Flags().String("since", "", "start time (e.g. 2d, 2026-03-01)")
-	channelCmd.Flags().String("until", "", "end time (e.g. 2026-03-10)")
-	channelCmd.Flags().Int("limit", 50, "maximum number of messages to fetch")
+	channelCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
+	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
+	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 	rootCmd.AddCommand(channelCmd)
 }
 
@@ -33,10 +39,7 @@ func init() {
 func runChannel(cmd *cobra.Command, args []string) error {
 	nameOrID := args[0]
 
-	format, err := parseOutputFormat()
-	if err != nil {
-		return err
-	}
+	format := output.Resolve(cmd)
 
 	since, _ := cmd.Flags().GetString("since")
 	until, _ := cmd.Flags().GetString("until")
@@ -49,7 +52,6 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve channel name to ID.
-	fmt.Fprintf(os.Stderr, "Resolving channel %q...\n", nameOrID)
 	channelID, err := channels.ResolveChannel(client, nameOrID)
 	if err != nil {
 		return fmt.Errorf("resolving channel: %w", err)
@@ -94,19 +96,34 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Fetch messages with progress indicator.
-	// Manual pagination loop (instead of CallPaginated) to show progress on stderr.
+	prog := progress.NewCounter("Fetching messages", format)
+
 	var allMessages []map[string]any
+	var isPartial bool
 	pageParams := make(map[string]string, len(params))
 	for k, v := range params {
 		pageParams[k] = v
 	}
 
 	for {
-		fmt.Fprintf(os.Stderr, "\rFetching messages... (%d so far)", len(allMessages))
+		prog.Update(len(allMessages))
 
 		result, err := client.Call("conversations.history", pageParams)
 		if err != nil {
-			clearProgress()
+			prog.Finish()
+
+			// On rate limit with partial data, warn and render what we have.
+			if _, ok := api.AsRateLimitError(err); ok && len(allMessages) > 0 {
+				clierrors.PrintWarning(fmt.Sprintf("rate limited after fetching %d messages; showing partial results", len(allMessages)), output.IsJSON(format))
+				isPartial = true
+				break // fall through to render what we have
+			}
+
+			// For other CLI errors, print and exit with the right code.
+			if cliErr, ok := api.AsCLIError(err); ok {
+				clierrors.PrintError(cliErr, output.IsJSON(format))
+				os.Exit(cliErr.ExitCode)
+			}
 			return fmt.Errorf("fetching channel history: %w", err)
 		}
 
@@ -121,7 +138,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		pageParams["cursor"] = cursor
 	}
 
-	clearProgress()
+	prog.Finish()
 
 	if len(allMessages) == 0 {
 		fmt.Fprintln(os.Stderr, "no messages found")
@@ -134,7 +151,6 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve user IDs to display names.
-	fmt.Fprintf(os.Stderr, "Resolving users...\n")
 	allMessages, err = resolver.ResolveUsers(allMessages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
@@ -150,8 +166,21 @@ func runChannel(cmd *cobra.Command, args []string) error {
 
 	// Format and render.
 	formatted := formatMessages(allMessages, teamURL, channelID, teamErr == nil)
-	if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
-		return err
+
+	if output.IsJSON(format) {
+		if isPartial {
+			pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
+			if err := output.PrintJSON(pr); err != nil {
+				return err
+			}
+		} else {
+			if err := output.PrintJSON(formatted); err != nil {
+				return err
+			}
+		}
+	} else {
+		// Table output: use table format for terminal.
+		renderMessagesTable(formatted)
 	}
 
 	// Cache the result (best-effort).
@@ -160,15 +189,57 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		Command: fmt.Sprintf("channel %s --since %s --until %s --limit %d", nameOrID, since, until, limit),
 	})
 
-	// Write per-item files if --output-dir is set.
+	// Write per-item files if --derived flag was explicitly set.
 	// For the channel command, each message gets its own file.
-	if OutputDir != "" {
-		// Use the original input as channel name context (falls back to channelID inside writeItemFiles).
-		if err := writeItemFiles(OutputDir, formatted, channelID, nameOrID); err != nil {
-			return fmt.Errorf("writing output files: %w", err)
+	if derivedDir := resolveDerivedDir(cmd); derivedDir != "" {
+		if err := writeItemFiles(derivedDir, formatted, channelID, nameOrID); err != nil {
+			return fmt.Errorf("writing derived files: %w", err)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+	if isPartial {
+		fmt.Fprintf(os.Stderr, "Done. %d messages fetched (partial — rate limited).\n", len(formatted))
+	} else {
+		fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+	}
 	return nil
+}
+
+// renderMessagesTable renders messages as a table to stdout.
+func renderMessagesTable(messages []formatting.Message) {
+	t := output.NewTable()
+	t.Header("TIME", "USER", "TEXT", "LINK")
+	for _, msg := range messages {
+		text := truncate(msg.Text, 80)
+		t.Row(msg.Time, msg.User, text, msg.Link)
+	}
+	_ = t.Flush()
+}
+
+// renderSearchTable renders search results as a table to stdout.
+func renderSearchTable(results []map[string]any) {
+	t := output.NewTable()
+	t.Header("CHANNEL", "TIME", "USER", "TEXT", "LINK")
+	for _, r := range results {
+		channel, _ := r["channel"].(string)
+		ts, _ := r["ts"].(string)
+		user, _ := r["user"].(string)
+		text, _ := r["text"].(string)
+		permalink, _ := r["permalink"].(string)
+
+		timeStr := internalOutput.FormatTS(ts)
+		text = truncate(text, 80)
+
+		t.Row(channel, timeStr, user, text, permalink)
+	}
+	_ = t.Flush()
+}
+
+// truncate shortens a string to maxLen runes, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-3]) + "..."
 }

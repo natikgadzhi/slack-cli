@@ -20,23 +20,26 @@ var authCmd = &cobra.Command{
 }
 
 var authCheckCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Check if Slack tokens are configured and valid",
-	RunE:  runAuthCheck,
+	Use:     "check",
+	Short:   "Check if Slack tokens are configured and valid",
+	Example: "  slack-cli auth check",
+	RunE:    runAuthCheck,
 }
 
 var authSetXoxcCmd = &cobra.Command{
-	Use:   "set-xoxc <token>",
-	Short: "Store xoxc token in the macOS Keychain",
-	Args:  cobra.ExactArgs(1),
-	RunE:  storeToken("xoxc token", config.KeychainXoxcService),
+	Use:     "set-xoxc <token>",
+	Short:   "Store xoxc token in the macOS Keychain",
+	Args:    cobra.ExactArgs(1),
+	Example: "  slack-cli auth set-xoxc xoxc-...",
+	RunE:    storeToken("xoxc token", config.KeychainXoxcService),
 }
 
 var authSetXoxdCmd = &cobra.Command{
-	Use:   "set-xoxd <token>",
-	Short: "Store xoxd cookie in the macOS Keychain",
-	Args:  cobra.ExactArgs(1),
-	RunE:  storeToken("xoxd cookie", config.KeychainXoxdService),
+	Use:     "set-xoxd <token>",
+	Short:   "Store xoxd cookie in the macOS Keychain",
+	Args:    cobra.ExactArgs(1),
+	Example: "  slack-cli auth set-xoxd xoxd-...",
+	RunE:    storeToken("xoxd cookie", config.KeychainXoxdService),
 }
 
 func init() {
@@ -83,7 +86,9 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	// auth.test failed. Print the error.
-	if apiErr, ok := api.AsAPIError(err); ok {
+	if cliErr, ok := api.AsCLIError(err); ok {
+		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", cliErr.Message)
+	} else if apiErr, ok := api.AsAPIError(err); ok {
 		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
 	} else {
 		_, _ = fmt.Fprintf(w, "[FAIL] %v\n", err)

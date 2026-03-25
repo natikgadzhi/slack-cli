@@ -179,7 +179,7 @@ func renderSearchResultsMarkdown(w io.Writer, results []map[string]any) error {
 		channel, _ := r["channel"].(string)
 
 		// Convert raw ts to human-readable time.
-		timeStr := formatTS(ts)
+		timeStr := FormatTS(ts)
 
 		header := "##"
 		if timeStr != "" {
@@ -232,9 +232,9 @@ func writeBlockquote(w io.Writer, text string) error {
 	return nil
 }
 
-// formatTS converts a Slack ts string (e.g. "1741234567.000000") to a
+// FormatTS converts a Slack ts string (e.g. "1741234567.000000") to a
 // human-readable UTC time string. Returns empty string if parsing fails.
-func formatTS(ts string) string {
+func FormatTS(ts string) string {
 	if ts == "" {
 		return ""
 	}

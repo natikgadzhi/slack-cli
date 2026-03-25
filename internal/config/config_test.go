@@ -76,6 +76,8 @@ func TestKeychainXoxdServiceOverride(t *testing.T) {
 
 func TestDataDirDefault(t *testing.T) {
 	t.Setenv("SLACK_DATA_DIR", "")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	got, err := DataDir()
 	if err != nil {
 		t.Fatalf("DataDir() returned unexpected error: %v", err)
@@ -84,14 +86,16 @@ func TestDataDirDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot determine home dir: %v", err)
 	}
-	want := filepath.Join(home, ".local", "share", "slack-cli")
+	want := filepath.Join(home, ".local", "share", "lambdal", "derived", "slack-cli")
 	if got != want {
 		t.Errorf("DataDir() = %q, want %q", got, want)
 	}
 }
 
-func TestDataDirOverride(t *testing.T) {
+func TestDataDirOverride_LegacySlackDataDir(t *testing.T) {
 	t.Setenv("SLACK_DATA_DIR", "/tmp/slack-test-data")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	got, err := DataDir()
 	if err != nil {
 		t.Fatalf("DataDir() returned unexpected error: %v", err)
@@ -101,10 +105,52 @@ func TestDataDirOverride(t *testing.T) {
 	}
 }
 
+func TestDataDirOverride_SlackCLIDerivedDir(t *testing.T) {
+	t.Setenv("SLACK_DATA_DIR", "")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "/tmp/slack-cli-derived")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
+	got, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() returned unexpected error: %v", err)
+	}
+	if got != "/tmp/slack-cli-derived" {
+		t.Errorf("DataDir() = %q, want %q", got, "/tmp/slack-cli-derived")
+	}
+}
+
+func TestDataDirOverride_LambdalDerivedDir(t *testing.T) {
+	t.Setenv("SLACK_DATA_DIR", "")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "/tmp/lambdal-derived")
+	got, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() returned unexpected error: %v", err)
+	}
+	if got != "/tmp/lambdal-derived/slack-cli" {
+		t.Errorf("DataDir() = %q, want %q", got, "/tmp/lambdal-derived/slack-cli")
+	}
+}
+
+func TestDataDir_PriorityOrder(t *testing.T) {
+	// SLACK_DATA_DIR takes highest priority.
+	t.Setenv("SLACK_DATA_DIR", "/tmp/highest-priority")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "/tmp/medium-priority")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "/tmp/lowest-priority")
+	got, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() returned unexpected error: %v", err)
+	}
+	if got != "/tmp/highest-priority" {
+		t.Errorf("DataDir() = %q, want %q (SLACK_DATA_DIR should win)", got, "/tmp/highest-priority")
+	}
+}
+
 // --- CacheDir ---
 
 func TestCacheDirSameAsDataDir(t *testing.T) {
 	t.Setenv("SLACK_DATA_DIR", "")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	dataDir, err := DataDir()
 	if err != nil {
 		t.Fatalf("DataDir() returned unexpected error: %v", err)
@@ -120,6 +166,8 @@ func TestCacheDirSameAsDataDir(t *testing.T) {
 
 func TestCacheDirRespectsDataDirOverride(t *testing.T) {
 	t.Setenv("SLACK_DATA_DIR", "/tmp/slack-test-data")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	got, err := CacheDir()
 	if err != nil {
 		t.Fatalf("CacheDir() returned unexpected error: %v", err)
@@ -134,6 +182,8 @@ func TestCacheDirRespectsDataDirOverride(t *testing.T) {
 func TestUserCachePathDefault(t *testing.T) {
 	t.Setenv("SLACK_USER_CACHE", "")
 	t.Setenv("SLACK_DATA_DIR", "")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	got, err := UserCachePath()
 	if err != nil {
 		t.Fatalf("UserCachePath() returned unexpected error: %v", err)
@@ -142,7 +192,7 @@ func TestUserCachePathDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cannot determine home dir: %v", err)
 	}
-	want := filepath.Join(home, ".local", "share", "slack-cli", "users.json")
+	want := filepath.Join(home, ".local", "share", "lambdal", "derived", "slack-cli", "users.json")
 	if got != want {
 		t.Errorf("UserCachePath() = %q, want %q", got, want)
 	}
@@ -162,6 +212,8 @@ func TestUserCachePathOverride(t *testing.T) {
 func TestUserCachePathRespectsDataDirOverride(t *testing.T) {
 	t.Setenv("SLACK_USER_CACHE", "")
 	t.Setenv("SLACK_DATA_DIR", "/tmp/slack-custom")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	got, err := UserCachePath()
 	if err != nil {
 		t.Fatalf("UserCachePath() returned unexpected error: %v", err)
@@ -190,6 +242,8 @@ func TestUserCachePathOverrideTakesPriorityOverDataDir(t *testing.T) {
 
 func TestCacheDirOverrideSameAsDataDir(t *testing.T) {
 	t.Setenv("SLACK_DATA_DIR", "/tmp/slack-shared")
+	t.Setenv("SLACK_CLI_DERIVED_DIR", "")
+	t.Setenv("LAMBDAL_DERIVED_DIR", "")
 	d, err := DataDir()
 	if err != nil {
 		t.Fatalf("DataDir() error: %v", err)

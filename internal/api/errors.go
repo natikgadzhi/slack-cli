@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
 )
 
 // APIError represents a non-OK response from the Slack API.
 // Code is the HTTP status code; Message contains the response body excerpt.
+// Deprecated: new code should use clierrors.CLIError via AsCLIError instead.
 type APIError struct {
 	Code    int
 	Message string
@@ -37,6 +40,24 @@ func AsAPIError(err error) (*APIError, bool) {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		return apiErr, true
+	}
+	return nil, false
+}
+
+// AsRateLimitError unwraps err into a *RateLimitError if possible.
+func AsRateLimitError(err error) (*RateLimitError, bool) {
+	var rlErr *RateLimitError
+	if errors.As(err, &rlErr) {
+		return rlErr, true
+	}
+	return nil, false
+}
+
+// AsCLIError unwraps err into a *clierrors.CLIError if possible.
+func AsCLIError(err error) (*clierrors.CLIError, bool) {
+	var cliErr *clierrors.CLIError
+	if errors.As(err, &cliErr) {
+		return cliErr, true
 	}
 	return nil, false
 }

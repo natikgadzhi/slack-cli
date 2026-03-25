@@ -10,22 +10,22 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 )
 
-// ---------- validateOutputDir tests ----------
+// ---------- validateDerivedDir tests ----------
 
-func TestValidateOutputDir_ValidPath(t *testing.T) {
+func TestValidateDerivedDir_ValidPath(t *testing.T) {
 	dir := t.TempDir()
-	got, err := validateOutputDir(dir)
+	got, err := validateDerivedDir(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != dir {
-		t.Errorf("validateOutputDir = %q, want %q", got, dir)
+		t.Errorf("validateDerivedDir = %q, want %q", got, dir)
 	}
 }
 
-func TestValidateOutputDir_RelativePath(t *testing.T) {
+func TestValidateDerivedDir_RelativePath(t *testing.T) {
 	// A relative path should be resolved to absolute.
-	got, err := validateOutputDir("some/relative/path")
+	got, err := validateDerivedDir("some/relative/path")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,8 +34,8 @@ func TestValidateOutputDir_RelativePath(t *testing.T) {
 	}
 }
 
-func TestValidateOutputDir_PathTraversal(t *testing.T) {
-	_, err := validateOutputDir("../../etc/passwd")
+func TestValidateDerivedDir_PathTraversal(t *testing.T) {
+	_, err := validateDerivedDir("../../etc/passwd")
 	if err == nil {
 		t.Fatal("expected error for path traversal")
 	}
@@ -386,15 +386,10 @@ func TestWriteSearchItemFiles_SkipsResultsWithoutTS(t *testing.T) {
 	}
 }
 
-// ---------- OutputDir does not affect stdout or cache ----------
+// ---------- derived flag does not affect stdout or cache ----------
 
-func TestOutputDir_DoesNotAffectCacheWrite(t *testing.T) {
-	// Verify that cacheWrite still works independently when OutputDir is set.
-	origOutputDir := OutputDir
-	defer func() { OutputDir = origOutputDir }()
-
-	OutputDir = t.TempDir()
-
+func TestDerivedFlag_DoesNotAffectCacheWrite(t *testing.T) {
+	// Verify that cacheWrite still works independently.
 	// cacheWrite to nil cache should not panic.
 	cacheWrite(nil, "test", "slug", map[string]string{"key": "value"}, cache.Metadata{})
 }

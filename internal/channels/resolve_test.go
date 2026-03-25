@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	clierrors "github.com/natikgadzhi/cli-kit/errors"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 
@@ -262,10 +264,10 @@ func TestResolveChannel_APIErrorDuringPagination(t *testing.T) {
 		t.Errorf("expected 'listing channels' in error, got: %v", err)
 	}
 
-	// Should be wrapping an APIError.
-	var apiErr *api.APIError
-	if !errors.As(err, &apiErr) {
-		t.Errorf("expected error to wrap *api.APIError, got: %T", err)
+	// Should be wrapping a CLIError (HTTP errors now use cli-kit errors).
+	var cliErr *clierrors.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Errorf("expected error to wrap *clierrors.CLIError, got: %T", err)
 	}
 }
 

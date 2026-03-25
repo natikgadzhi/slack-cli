@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
@@ -15,6 +17,20 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/output"
 	"github.com/natikgadzhi/slack-cli/internal/users"
 )
+
+// resolveDerivedDir returns the derived directory path if the --derived flag was
+// explicitly set on the command line. Returns "" if the flag was not set,
+// preserving the original behavior of only writing derived files on explicit request.
+func resolveDerivedDir(cmd *cobra.Command) string {
+	f := cmd.Flags().Lookup("derived")
+	if f == nil {
+		f = cmd.PersistentFlags().Lookup("derived")
+	}
+	if f != nil && f.Changed {
+		return f.Value.String()
+	}
+	return ""
+}
 
 // setupClientOnly creates an API client from stored credentials without a user resolver.
 // Used by commands that don't need user resolution (e.g. search).
@@ -41,11 +57,6 @@ func setupClient() (*api.Client, *users.UserResolver, error) {
 		return nil, nil, fmt.Errorf("creating user resolver: %w", err)
 	}
 	return client, resolver, nil
-}
-
-// parseOutputFormat parses the output format from the persistent flag.
-func parseOutputFormat() (output.Format, error) {
-	return output.ParseFormat(OutputFormat)
 }
 
 // getCache returns a cache instance if caching is enabled, or nil if --no-cache is set.
@@ -76,11 +87,6 @@ func cacheWrite(c *cache.Cache, objectType, slug string, data any, meta cache.Me
 	}
 }
 
-// clearProgress clears the stderr progress line using ANSI escape (erase to end of line).
-func clearProgress() {
-	fmt.Fprintf(os.Stderr, "\r\033[K")
-}
-
 // formatMessages converts raw Slack messages to formatted Messages with permalinks.
 func formatMessages(messages []map[string]any, teamURL, channelID string, hasTeamURL bool) []formatting.Message {
 	formatted := make([]formatting.Message, 0, len(messages))
@@ -96,18 +102,18 @@ func formatMessages(messages []map[string]any, teamURL, channelID string, hasTea
 	return formatted
 }
 
-// validateOutputDir checks that the output directory path is safe (no path traversal)
+// validateDerivedDir checks that the derived directory path is safe (no path traversal)
 // and returns the cleaned absolute path.
-func validateOutputDir(outputDir string) (string, error) {
-	cleaned := filepath.Clean(outputDir)
+func validateDerivedDir(dir string) (string, error) {
+	cleaned := filepath.Clean(dir)
 	abs, err := filepath.Abs(cleaned)
 	if err != nil {
-		return "", fmt.Errorf("output-dir: invalid path %q: %w", outputDir, err)
+		return "", fmt.Errorf("derived: invalid path %q: %w", dir, err)
 	}
 	// Reject paths that contain ".." components after cleaning.
 	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
 		if part == ".." {
-			return "", fmt.Errorf("output-dir: path %q contains path traversal", outputDir)
+			return "", fmt.Errorf("derived: path %q contains path traversal", dir)
 		}
 	}
 	return abs, nil
@@ -141,11 +147,11 @@ func renderMultipleMarkdown(msgs []formatting.Message) ([]byte, error) {
 }
 
 // writeItemFiles writes each message as its own markdown file with frontmatter
-// under <outputDir>/slack/channels/<context>/<ts>.md.
+// under <derivedDir>/slack/channels/<context>/<ts>.md.
 // The context is channelName if non-empty, otherwise channelID.
-func writeItemFiles(outputDir string, items []formatting.Message, channelID, channelName string) error {
+func writeItemFiles(derivedDir string, items []formatting.Message, channelID, channelName string) error {
 	const objectType = "channels"
-	absDir, err := validateOutputDir(outputDir)
+	absDir, err := validateDerivedDir(derivedDir)
 	if err != nil {
 		return err
 	}
@@ -155,11 +161,11 @@ func writeItemFiles(outputDir string, items []formatting.Message, channelID, cha
 		context = channelID
 	}
 
-	// Create a cache rooted at <outputDir>/slack/
+	// Create a cache rooted at <derivedDir>/slack/
 	slackDir := filepath.Join(absDir, "slack")
 	c, err := cache.NewCacheWithDir(slackDir)
 	if err != nil {
-		return fmt.Errorf("output-dir: create directory: %w", err)
+		return fmt.Errorf("derived: create directory: %w", err)
 	}
 
 	for _, msg := range items {
@@ -170,7 +176,7 @@ func writeItemFiles(outputDir string, items []formatting.Message, channelID, cha
 
 		body, err := renderSingleMarkdown(msg)
 		if err != nil {
-			return fmt.Errorf("output-dir: render message %s: %w", ts, err)
+			return fmt.Errorf("derived: render message %s: %w", ts, err)
 		}
 
 		slug := filepath.Join(context, ts)
@@ -184,7 +190,7 @@ func writeItemFiles(outputDir string, items []formatting.Message, channelID, cha
 		}
 
 		if err := c.PutItem(objectType, slug, body, meta); err != nil {
-			return fmt.Errorf("output-dir: write %s: %w", ts, err)
+			return fmt.Errorf("derived: write %s: %w", ts, err)
 		}
 	}
 
@@ -192,9 +198,9 @@ func writeItemFiles(outputDir string, items []formatting.Message, channelID, cha
 }
 
 // writeThreadFile writes all messages in a thread as a single markdown file
-// under <outputDir>/slack/messages/<channelID>/<threadTS>.md.
-func writeThreadFile(outputDir string, items []formatting.Message, channelID, channelName, threadTS, sourceURL string) error {
-	absDir, err := validateOutputDir(outputDir)
+// under <derivedDir>/slack/messages/<channelID>/<threadTS>.md.
+func writeThreadFile(derivedDir string, items []formatting.Message, channelID, channelName, threadTS, sourceURL string) error {
+	absDir, err := validateDerivedDir(derivedDir)
 	if err != nil {
 		return err
 	}
@@ -207,12 +213,12 @@ func writeThreadFile(outputDir string, items []formatting.Message, channelID, ch
 	slackDir := filepath.Join(absDir, "slack")
 	c, err := cache.NewCacheWithDir(slackDir)
 	if err != nil {
-		return fmt.Errorf("output-dir: create directory: %w", err)
+		return fmt.Errorf("derived: create directory: %w", err)
 	}
 
 	body, err := renderMultipleMarkdown(items)
 	if err != nil {
-		return fmt.Errorf("output-dir: render thread: %w", err)
+		return fmt.Errorf("derived: render thread: %w", err)
 	}
 
 	ts := sanitizeTS(threadTS)
@@ -235,16 +241,16 @@ func writeThreadFile(outputDir string, items []formatting.Message, channelID, ch
 	}
 
 	if err := c.PutItem("messages", slug, body, meta); err != nil {
-		return fmt.Errorf("output-dir: write thread %s: %w", ts, err)
+		return fmt.Errorf("derived: write thread %s: %w", ts, err)
 	}
 
 	return nil
 }
 
 // writeSearchItemFiles writes each search result as its own markdown file
-// under <outputDir>/slack/search/<queryHash>/<ts>.md.
-func writeSearchItemFiles(outputDir string, results []map[string]any, query string) error {
-	absDir, err := validateOutputDir(outputDir)
+// under <derivedDir>/slack/search/<queryHash>/<ts>.md.
+func writeSearchItemFiles(derivedDir string, results []map[string]any, query string) error {
+	absDir, err := validateDerivedDir(derivedDir)
 	if err != nil {
 		return err
 	}
@@ -252,7 +258,7 @@ func writeSearchItemFiles(outputDir string, results []map[string]any, query stri
 	slackDir := filepath.Join(absDir, "slack")
 	c, err := cache.NewCacheWithDir(slackDir)
 	if err != nil {
-		return fmt.Errorf("output-dir: create directory: %w", err)
+		return fmt.Errorf("derived: create directory: %w", err)
 	}
 
 	queryHash := cache.SearchSlug(query)
@@ -267,7 +273,7 @@ func writeSearchItemFiles(outputDir string, results []map[string]any, query stri
 		// Render the search result as markdown.
 		var buf bytes.Buffer
 		if err := output.RenderSearchResults(&buf, []map[string]any{r}, output.Markdown); err != nil {
-			return fmt.Errorf("output-dir: render search result %s: %w", ts, err)
+			return fmt.Errorf("derived: render search result %s: %w", ts, err)
 		}
 
 		slug := filepath.Join(queryHash, ts)
@@ -284,7 +290,7 @@ func writeSearchItemFiles(outputDir string, results []map[string]any, query stri
 		}
 
 		if err := c.PutItem("search", slug, buf.Bytes(), meta); err != nil {
-			return fmt.Errorf("output-dir: write search result %s: %w", ts, err)
+			return fmt.Errorf("derived: write search result %s: %w", ts, err)
 		}
 	}
 
