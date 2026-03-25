@@ -14,6 +14,7 @@ import (
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
+	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
 var searchCmd = &cobra.Command{
@@ -235,4 +236,23 @@ func extractSearchMatches(result map[string]any) []map[string]any {
 		return nil
 	}
 	return api.ExtractItems(messagesMap, "matches")
+}
+
+// renderSearchTable renders search results as a table to stdout.
+func renderSearchTable(results []map[string]any) {
+	t := output.NewTable()
+	t.Header("CHANNEL", "TIME", "USER", "TEXT", "LINK")
+	for _, r := range results {
+		channel, _ := r["channel"].(string)
+		ts, _ := r["ts"].(string)
+		user, _ := r["user"].(string)
+		text, _ := r["text"].(string)
+		permalink, _ := r["permalink"].(string)
+
+		timeStr := internalOutput.FormatTS(ts)
+		text = truncate(text, 80)
+
+		t.Row(channel, timeStr, user, text, permalink)
+	}
+	_ = t.Flush()
 }

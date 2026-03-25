@@ -32,8 +32,8 @@ var rootCmd = &cobra.Command{
 	Long:  "slack-cli — Slack read-only CLI for fetching messages, threads, and history.",
 	Example: `  slack-cli auth check
   slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
-  slack-cli channel general --since 2d --limit 100
-  slack-cli channel C12345678 --since 2026-03-01 --until 2026-03-10
+  slack-cli channels get general --since 2d --limit 100
+  slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
   slack-cli search "deployment failed" --limit 10
   slack-cli search "from:@alice" -o json | jq '.[] | .text'
   slack-cli users --limit 50`,
