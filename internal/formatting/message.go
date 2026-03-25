@@ -48,10 +48,7 @@ func FormatMessage(raw map[string]any) Message {
 	if text, ok := raw["text"].(string); ok {
 		text = strings.TrimSpace(text)
 		if text != "" {
-			if runes := []rune(text); len(runes) > 500 {
-				text = string(runes[:500])
-			}
-			msg.Text = text
+			msg.Text = TruncateRunes(text, 500)
 		}
 	}
 
@@ -102,9 +99,7 @@ func buildAttachment(att map[string]any) *Attachment {
 		text = fb
 	}
 	text = strings.TrimSpace(text)
-	if runes := []rune(text); len(runes) > 300 {
-		text = string(runes[:300])
-	}
+	text = TruncateRunes(text, 300)
 	if text != "" {
 		a.Text = text
 		empty = false
@@ -158,6 +153,15 @@ func BuildPermalink(teamURL, channelID, ts string) string {
 	base := strings.TrimRight(teamURL, "/")
 	tsCompact := strings.ReplaceAll(ts, ".", "")
 	return fmt.Sprintf("%s/archives/%s/p%s", base, channelID, tsCompact)
+}
+
+// TruncateRunes truncates s to at most maxRunes runes. No suffix is added.
+func TruncateRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes])
 }
 
 // toInt converts an any value to int, handling both float64 (JSON default) and int.

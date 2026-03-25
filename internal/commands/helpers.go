@@ -18,6 +18,24 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/users"
 )
 
+// teamURLResult holds the result of a concurrent GetTeamURL call.
+type teamURLResult struct {
+	url string
+	err error
+}
+
+// fetchTeamURLAsync starts a goroutine to fetch the team URL and returns
+// a channel that will receive the result. This is used by commands that
+// want to overlap the team URL fetch with other API calls.
+func fetchTeamURLAsync(client *api.Client) <-chan teamURLResult {
+	ch := make(chan teamURLResult, 1)
+	go func() {
+		u, err := client.GetTeamURL()
+		ch <- teamURLResult{u, err}
+	}()
+	return ch
+}
+
 // resolveDerivedDir returns the derived directory path if the --derived flag was
 // explicitly set on the command line. Returns "" if the flag was not set,
 // preserving the original behavior of only writing derived files on explicit request.

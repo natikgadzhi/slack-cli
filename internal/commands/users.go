@@ -199,11 +199,7 @@ func renderUsersTable(users []map[string]any) {
 	t := output.NewTable()
 	t.Header("ID", "NAME", "REAL NAME", "EMAIL")
 	for _, u := range users {
-		id, _ := u["id"].(string)
-		name, _ := u["name"].(string)
-		realName, _ := u["real_name"].(string)
-		email, _ := u["email"].(string)
-		t.Row(id, name, realName, email)
+		t.Row(getString(u, "id"), getString(u, "name"), getString(u, "real_name"), getString(u, "email"))
 	}
 	_ = t.Flush()
 }
