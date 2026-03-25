@@ -125,7 +125,7 @@ func (c *Cache) Put(objectType, slug string, content []byte, meta Metadata) erro
 // PutItem writes a single item file with pre-rendered markdown body and
 // frontmatter. It reuses the same atomic-write and path-safety logic as Put.
 // Unlike Put (which stores aggregate/JSON data), PutItem is designed for
-// the --output-dir feature where each item gets its own rendered markdown file.
+// the --derived feature where each item gets its own rendered markdown file.
 func (c *Cache) PutItem(objectType, slug string, body []byte, meta Metadata) error {
 	return c.Put(objectType, slug, body, meta)
 }

@@ -10,22 +10,22 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 )
 
-// ---------- validateOutputDir tests ----------
+// ---------- validateDerivedDir tests ----------
 
 func TestValidateDerivedDir_ValidPath(t *testing.T) {
 	dir := t.TempDir()
-	got, err := validateOutputDir(dir)
+	got, err := validateDerivedDir(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != dir {
-		t.Errorf("validateOutputDir = %q, want %q", got, dir)
+		t.Errorf("validateDerivedDir = %q, want %q", got, dir)
 	}
 }
 
 func TestValidateDerivedDir_RelativePath(t *testing.T) {
 	// A relative path should be resolved to absolute.
-	got, err := validateOutputDir("some/relative/path")
+	got, err := validateDerivedDir("some/relative/path")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestValidateDerivedDir_RelativePath(t *testing.T) {
 }
 
 func TestValidateDerivedDir_PathTraversal(t *testing.T) {
-	_, err := validateOutputDir("../../etc/passwd")
+	_, err := validateDerivedDir("../../etc/passwd")
 	if err == nil {
 		t.Fatal("expected error for path traversal")
 	}

@@ -23,7 +23,7 @@ type Metadata struct {
 	SourceURL  string
 	Command    string
 
-	// Optional per-item fields (used by --output-dir file-per-item writes).
+	// Optional per-item fields (used by --derived file-per-item writes).
 	Channel   string // resolved channel name
 	ChannelID string // Slack channel ID
 	User      string // message author display name
