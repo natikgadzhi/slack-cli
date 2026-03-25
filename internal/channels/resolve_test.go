@@ -1,8 +1,10 @@
 package channels
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,7 +38,7 @@ func TestResolveChannel_IDPassthrough(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	id, err := ResolveChannel(client, "C12345678")
+	id, err := ResolveChannel(client, "C12345678", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +57,7 @@ func TestResolveChannel_HashPrefixedID(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	id, err := ResolveChannel(client, "#C12345678")
+	id, err := ResolveChannel(client, "#C12345678", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,8 +78,8 @@ func TestResolveChannel_NameFoundFirstPage(t *testing.T) {
 		if got := r.PostFormValue("exclude_archived"); got != "true" {
 			t.Errorf("exclude_archived = %q, want true", got)
 		}
-		if got := r.PostFormValue("types"); got != "public_channel,private_channel,mpim,im" {
-			t.Errorf("types = %q", got)
+		if got := r.PostFormValue("types"); got != "public_channel,private_channel" {
+			t.Errorf("types = %q, want public_channel,private_channel", got)
 		}
 
 		resp := map[string]any{
@@ -94,7 +96,7 @@ func TestResolveChannel_NameFoundFirstPage(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	id, err := ResolveChannel(client, "general")
+	id, err := ResolveChannel(client, "general", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,7 +154,7 @@ func TestResolveChannel_NameFoundSecondPage(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	id, err := ResolveChannel(client, "deployments")
+	id, err := ResolveChannel(client, "deployments", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,7 +177,7 @@ func TestResolveChannel_EmptyInput(t *testing.T) {
 	client := newTestClient(srv.URL)
 
 	// Empty string should return an error.
-	_, err := ResolveChannel(client, "")
+	_, err := ResolveChannel(client, "", nil)
 	if err == nil {
 		t.Fatal("expected error for empty input")
 	}
@@ -184,7 +186,7 @@ func TestResolveChannel_EmptyInput(t *testing.T) {
 	}
 
 	// Just a "#" should also return an error (becomes empty after trimming).
-	_, err = ResolveChannel(client, "#")
+	_, err = ResolveChannel(client, "#", nil)
 	if err == nil {
 		t.Fatal("expected error for '#' input")
 	}
@@ -201,7 +203,7 @@ func TestResolveChannel_NameNotFound(t *testing.T) {
 				map[string]any{"id": "C11111111", "name": "random"},
 				map[string]any{"id": "C22222222", "name": "general"},
 			},
-			// No next_cursor → pagination ends after this page.
+			// No next_cursor -> pagination ends after this page.
 		}
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp)
@@ -209,7 +211,7 @@ func TestResolveChannel_NameNotFound(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	_, err := ResolveChannel(client, "nonexistent")
+	_, err := ResolveChannel(client, "nonexistent", nil)
 	if err == nil {
 		t.Fatal("expected error for channel not found")
 	}
@@ -238,7 +240,7 @@ func TestResolveChannel_CaseInsensitiveMatch(t *testing.T) {
 	client := newTestClient(srv.URL)
 
 	// "General" should match "general" (Slack stores lowercase).
-	id, err := ResolveChannel(client, "General")
+	id, err := ResolveChannel(client, "General", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -256,7 +258,7 @@ func TestResolveChannel_APIErrorDuringPagination(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	_, err := ResolveChannel(client, "general")
+	_, err := ResolveChannel(client, "general", nil)
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}
@@ -274,7 +276,7 @@ func TestResolveChannel_APIErrorDuringPagination(t *testing.T) {
 func TestResolveChannel_RateLimitPartialResults_NotFound(t *testing.T) {
 	// Page 1: returns channels that don't match, with a next cursor.
 	// Page 2: returns HTTP 429 (rate limited).
-	// Channel not found in partial results → should return an error.
+	// Channel not found in partial results -> should return an error.
 	page := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
@@ -308,7 +310,7 @@ func TestResolveChannel_RateLimitPartialResults_NotFound(t *testing.T) {
 		api.WithTimeout(5*time.Second),
 		api.WithMaxRetries(0),
 	)
-	_, err := ResolveChannel(client, "deployments")
+	_, err := ResolveChannel(client, "deployments", nil)
 	if err == nil {
 		t.Fatal("expected error when channel not found in partial results")
 	}
@@ -326,7 +328,7 @@ func TestResolveChannel_RateLimitPartialResults_NotFound(t *testing.T) {
 func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 	// Page 1: returns the channel we're looking for, with a next cursor.
 	// Because the channel is found on page 1, the loop returns immediately
-	// without fetching page 2 — so the 429 on page 2 is never encountered.
+	// without fetching page 2 -- so the 429 on page 2 is never encountered.
 	page := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
@@ -358,7 +360,7 @@ func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 		api.WithTimeout(5*time.Second),
 		api.WithMaxRetries(0),
 	)
-	id, err := ResolveChannel(client, "deployments")
+	id, err := ResolveChannel(client, "deployments", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -400,7 +402,7 @@ func TestResolveChannel_EarlyTermination(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	id, err := ResolveChannel(client, "general")
+	id, err := ResolveChannel(client, "general", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -409,5 +411,120 @@ func TestResolveChannel_EarlyTermination(t *testing.T) {
 	}
 	if pagesFetched != 1 {
 		t.Errorf("expected 1 page fetched, got %d", pagesFetched)
+	}
+}
+
+func TestResolveChannel_MaxPagesSafetyValve(t *testing.T) {
+	// Server always returns channels that don't match with a next cursor,
+	// simulating a very large workspace. The safety valve should stop after
+	// maxPages pages.
+	pagesFetched := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pagesFetched++
+		resp := map[string]any{
+			"ok": true,
+			"channels": []any{
+				map[string]any{"id": fmt.Sprintf("C%08d", pagesFetched), "name": fmt.Sprintf("channel-%d", pagesFetched)},
+			},
+			"response_metadata": map[string]any{
+				"next_cursor": fmt.Sprintf("cursor-page-%d", pagesFetched+1),
+			},
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	_, err := ResolveChannel(client, "nonexistent", nil)
+	if err == nil {
+		t.Fatal("expected error after exceeding max pages")
+	}
+	if pagesFetched != maxPages {
+		t.Errorf("expected %d pages fetched, got %d", maxPages, pagesFetched)
+	}
+	if !strings.Contains(err.Error(), "not found after checking") {
+		t.Errorf("expected 'not found after checking' in error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "workspace may be too large") {
+		t.Errorf("expected 'workspace may be too large' in error, got: %v", err)
+	}
+}
+
+func TestResolveChannel_ProgressOutput(t *testing.T) {
+	// Verify that progress output is written to the provided writer
+	// when paginating through multiple pages.
+	page := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		var resp map[string]any
+		switch page {
+		case 1:
+			resp = map[string]any{
+				"ok": true,
+				"channels": []any{
+					map[string]any{"id": "C11111111", "name": "random"},
+					map[string]any{"id": "C22222222", "name": "general"},
+				},
+				"response_metadata": map[string]any{
+					"next_cursor": "cursor-page-2",
+				},
+			}
+		case 2:
+			resp = map[string]any{
+				"ok": true,
+				"channels": []any{
+					map[string]any{"id": "C33333333", "name": "deployments"},
+				},
+			}
+		default:
+			resp = map[string]any{"ok": true, "channels": []any{}}
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	var buf bytes.Buffer
+	id, err := ResolveChannel(client, "deployments", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "C33333333" {
+		t.Errorf("expected C33333333, got %q", id)
+	}
+
+	output := buf.String()
+	// Should contain progress messages for both pages.
+	if !strings.Contains(output, "Checked 2 channels across 1 pages") {
+		t.Errorf("expected progress for page 1 in output, got: %q", output)
+	}
+	if !strings.Contains(output, "Checked 3 channels across 2 pages") {
+		t.Errorf("expected progress for page 2 in output, got: %q", output)
+	}
+}
+
+func TestResolveChannel_NilProgressWriter(t *testing.T) {
+	// Verify that passing nil for progress does not panic.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"ok": true,
+			"channels": []any{
+				map[string]any{"id": "C22222222", "name": "general"},
+			},
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(srv.URL)
+	id, err := ResolveChannel(client, "general", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "C22222222" {
+		t.Errorf("expected C22222222, got %q", id)
 	}
 }
