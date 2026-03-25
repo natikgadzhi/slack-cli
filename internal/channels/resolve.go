@@ -6,26 +6,27 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 
-// maxPages is the maximum number of pages to paginate through when resolving
-// a channel name. At 200 channels per page, this covers 4000 channels.
-const maxPages = 20
+// maxPages caps pagination as a safety valve against infinite cursor loops.
+const maxPages = 100
 
 // channelIDPattern matches Slack channel IDs: 8+ uppercase letters and digits.
 var channelIDPattern = regexp.MustCompile(`^[A-Z0-9]{8,}$`)
 
 // ResolveChannel resolves a channel name or ID to a Slack channel ID.
 // If nameOrID looks like a channel ID (8+ uppercase alphanumeric chars), it is
-// returned as-is. Otherwise, conversations.list is paginated to find a channel
-// whose name matches. Pagination stops as soon as the channel is found,
-// avoiding unnecessary API calls in large workspaces.
+// returned as-is. Otherwise, users.conversations is paginated to find a channel
+// whose name matches. First tries active channels only; if not found, retries
+// including archived channels.
 //
 // If progress is non-nil, pagination progress is written to it (intended for
 // os.Stderr). Pass nil to suppress progress output.
-func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer) (string, error) {
+// If verbose is true, each channel name encountered is logged to progress.
+func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, verbose bool) (string, error) {
 	nameOrID = strings.TrimPrefix(nameOrID, "#")
 
 	if nameOrID == "" {
@@ -36,17 +37,57 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer) (st
 		return nameOrID, nil
 	}
 
+	if progress != nil {
+		client.OnRateLimit = func(endpoint string, delay time.Duration, attempt int) {
+			fmt.Fprintf(progress, "\r  [rate limited] waiting %s (retry %d)...", delay.Round(time.Millisecond), attempt+1)
+		}
+		defer func() { client.OnRateLimit = nil }()
+	}
+
+	// First pass: active channels only.
+	id, err := paginateChannels(client, nameOrID, true, progress, verbose)
+	if err != nil {
+		return "", err
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	// Second pass: include archived channels.
+	if progress != nil {
+		fmt.Fprintf(progress, "\rNot found in active channels, checking archived...")
+	}
+	id, err = paginateChannels(client, nameOrID, false, progress, verbose)
+	if err != nil {
+		return "", err
+	}
+	if id != "" {
+		return id, nil
+	}
+
+	if progress != nil {
+		fmt.Fprintf(progress, "\n")
+	}
+	return "", fmt.Errorf("channel not found: %q", nameOrID)
+}
+
+// paginateChannels pages through users.conversations looking for a channel
+// matching name. If excludeArchived is true, archived channels are skipped.
+// Returns the channel ID if found, empty string if not found, or an error.
+func paginateChannels(client *api.Client, name string, excludeArchived bool, progress io.Writer, verbose bool) (string, error) {
 	params := map[string]string{
-		"limit":            "200",
-		"exclude_archived": "true",
-		"types":            "public_channel,private_channel",
+		"limit": "200",
+		"types": "public_channel,private_channel",
+	}
+	if excludeArchived {
+		params["exclude_archived"] = "true"
 	}
 
 	pages := 0
 	checked := 0
 
 	for {
-		result, err := client.Call("conversations.list", params)
+		result, err := client.Call("users.conversations", params)
 		if err != nil {
 			return "", fmt.Errorf("listing channels: %w", err)
 		}
@@ -59,7 +100,17 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer) (st
 			fmt.Fprintf(progress, "\rChecked %d channels across %d pages...", checked, pages)
 		}
 
-		if id := findChannelByName(channels, nameOrID); id != "" {
+		if verbose && progress != nil {
+			for _, ch := range channels {
+				n, _ := ch["name"].(string)
+				nn, _ := ch["name_normalized"].(string)
+				id, _ := ch["id"].(string)
+				fmt.Fprintf(progress, "\n  [debug] %s  name=%q  name_normalized=%q", id, n, nn)
+			}
+			fmt.Fprintf(progress, "\n")
+		}
+
+		if id := findChannelByName(channels, name); id != "" {
 			if progress != nil {
 				fmt.Fprintf(progress, "\n")
 			}
@@ -68,31 +119,28 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer) (st
 
 		cursor := api.ExtractNextCursor(result, "next_cursor")
 		if cursor == "" {
-			break
+			return "", nil
 		}
 
 		if pages >= maxPages {
 			if progress != nil {
 				fmt.Fprintf(progress, "\n")
 			}
-			return "", fmt.Errorf("channel %q not found after checking %d channels across %d pages (workspace may be too large — try using the channel ID instead)", nameOrID, checked, pages)
+			return "", fmt.Errorf("channel %q not found after checking %d channels across %d pages (try using the channel ID instead)", name, checked, pages)
 		}
 
 		params["cursor"] = cursor
 	}
-
-	if progress != nil {
-		fmt.Fprintf(progress, "\n")
-	}
-
-	return "", fmt.Errorf("channel not found: %q", nameOrID)
 }
 
 // findChannelByName searches a slice of channel maps for one whose "name"
-// matches the given name, returning its "id" or empty string if not found.
+// or "name_normalized" matches the given name, returning its "id" or empty
+// string if not found.
 func findChannelByName(channels []map[string]any, name string) string {
 	for _, ch := range channels {
-		if n, _ := ch["name"].(string); strings.EqualFold(n, name) {
+		n, _ := ch["name"].(string)
+		nn, _ := ch["name_normalized"].(string)
+		if strings.EqualFold(n, name) || strings.EqualFold(nn, name) {
 			if id, _ := ch["id"].(string); id != "" {
 				return id
 			}

@@ -44,6 +44,11 @@ type Client struct {
 
 	// sleepFn is an indirection for testing; defaults to time.Sleep.
 	sleepFn func(time.Duration)
+
+	// OnRateLimit is called when a 429 is received, before sleeping.
+	// Arguments: endpoint, delay, attempt number (0-based).
+	// Callers can set this to surface rate-limit waits in progress output.
+	OnRateLimit func(endpoint string, delay time.Duration, attempt int)
 }
 
 // NewClient creates a Client with the given tokens and optional configuration.
@@ -100,7 +105,11 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 			if retriesLeft <= 0 {
 				return nil, &RateLimitError{RetryAfter: retryAfter}
 			}
-			delay := c.backoffDelay(retryAfter, hasHeader, c.maxRetries-retriesLeft)
+			attempt := c.maxRetries - retriesLeft
+			delay := c.backoffDelay(retryAfter, hasHeader, attempt)
+			if c.OnRateLimit != nil {
+				c.OnRateLimit(endpoint, delay, attempt)
+			}
 			c.sleepFn(delay)
 			retriesLeft--
 			continue

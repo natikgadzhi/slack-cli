@@ -99,7 +99,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Extract matches from the nested messages.matches structure.
 	matches := extractSearchMatches(result)
 	if len(matches) == 0 {
-		fmt.Fprintln(os.Stderr, "no results found")
+		if !output.IsJSON(format) {
+			fmt.Fprintln(os.Stderr, "no results found")
+		}
 		return nil
 	}
 

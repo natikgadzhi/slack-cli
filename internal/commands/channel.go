@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
@@ -52,7 +53,13 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve channel name to ID.
-	channelID, err := channels.ResolveChannel(client, nameOrID, os.Stderr)
+	// Suppress progress output in JSON mode to keep stdout clean for piping.
+	debug, _ := cmd.Flags().GetBool("debug")
+	var progressWriter io.Writer
+	if !output.IsJSON(format) {
+		progressWriter = os.Stderr
+	}
+	channelID, err := channels.ResolveChannel(client, nameOrID, progressWriter, debug)
 	if err != nil {
 		return fmt.Errorf("resolving channel: %w", err)
 	}
@@ -141,7 +148,9 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	prog.Finish()
 
 	if len(allMessages) == 0 {
-		fmt.Fprintln(os.Stderr, "no messages found")
+		if !output.IsJSON(format) {
+			fmt.Fprintln(os.Stderr, "no messages found")
+		}
 		return nil
 	}
 
@@ -152,7 +161,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 
 	// Resolve user IDs to display names.
 	allMessages, err = resolver.ResolveUsers(allMessages)
-	if err != nil {
+	if err != nil && !output.IsJSON(format) {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
@@ -160,7 +169,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	teamResult := <-teamCh
 	teamURL := teamResult.url
 	teamErr := teamResult.err
-	if teamErr != nil {
+	if teamErr != nil && !output.IsJSON(format) {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}
 
@@ -197,10 +206,12 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if isPartial {
-		fmt.Fprintf(os.Stderr, "Done. %d messages fetched (partial — rate limited).\n", len(formatted))
-	} else {
-		fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+	if !output.IsJSON(format) {
+		if isPartial {
+			fmt.Fprintf(os.Stderr, "Done. %d messages fetched (partial — rate limited).\n", len(formatted))
+		} else {
+			fmt.Fprintf(os.Stderr, "Done. %d messages fetched.\n", len(formatted))
+		}
 	}
 	return nil
 }

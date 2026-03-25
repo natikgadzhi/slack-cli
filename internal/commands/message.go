@@ -78,13 +78,15 @@ func runMessage(cmd *cobra.Command, args []string) error {
 
 	messages := api.ExtractItems(result, "messages")
 	if len(messages) == 0 {
-		fmt.Fprintln(os.Stderr, "no messages found")
+		if !output.IsJSON(format) {
+			fmt.Fprintln(os.Stderr, "no messages found")
+		}
 		return nil
 	}
 
 	// Resolve user IDs to display names.
 	messages, err = resolver.ResolveUsers(messages)
-	if err != nil {
+	if err != nil && !output.IsJSON(format) {
 		fmt.Fprintf(os.Stderr, "warning: user resolution failed: %v\n", err)
 	}
 
@@ -92,7 +94,7 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	teamResult := <-teamCh
 	teamURL := teamResult.url
 	teamErr := teamResult.err
-	if teamErr != nil {
+	if teamErr != nil && !output.IsJSON(format) {
 		fmt.Fprintf(os.Stderr, "warning: could not get team URL: %v\n", teamErr)
 	}
 
