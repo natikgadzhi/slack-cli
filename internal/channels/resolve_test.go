@@ -10,6 +10,7 @@ import (
 	"time"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 

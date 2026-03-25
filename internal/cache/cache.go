@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/natikgadzhi/cli-kit/derived"
+
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 

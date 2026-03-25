@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 )

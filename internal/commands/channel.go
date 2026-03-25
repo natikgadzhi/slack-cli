@@ -5,11 +5,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/spf13/cobra"
-
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
@@ -213,7 +213,7 @@ func renderMessagesTable(messages []formatting.Message) {
 		text := truncate(msg.Text, 80)
 		t.Row(msg.Time, msg.User, text, msg.Link)
 	}
-	t.Flush()
+	_ = t.Flush()
 }
 
 // renderSearchTable renders search results as a table to stdout.
@@ -232,7 +232,7 @@ func renderSearchTable(results []map[string]any) {
 
 		t.Row(channel, timeStr, user, text, permalink)
 	}
-	t.Flush()
+	_ = t.Flush()
 }
 
 // truncate shortens a string to maxLen runes, appending "..." if truncated.

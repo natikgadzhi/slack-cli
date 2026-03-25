@@ -16,6 +16,7 @@ import (
 	"time"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
+
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 
@@ -129,7 +130,7 @@ func (c *Client) callWithRetry(endpoint string, params map[string]string, retrie
 					errMsg = e
 				}
 				cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
-				cliErr.WithCode(resp.StatusCode)
+				cliErr = cliErr.WithCode(resp.StatusCode)
 				return nil, cliErr
 			}
 		}
