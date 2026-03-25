@@ -11,7 +11,6 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
-	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
 var messageCmd = &cobra.Command{
@@ -105,9 +104,8 @@ func runMessage(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		if err := internalOutput.RenderMessages(os.Stdout, formatted, internalOutput.Markdown); err != nil {
-			return err
-		}
+		// Table output: same format as channel command.
+		renderMessagesTable(formatted)
 	}
 
 	// Cache the result (best-effort).
