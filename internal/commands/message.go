@@ -52,15 +52,7 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start team URL fetch concurrently — it's independent of the message fetch.
-	type teamURLResult struct {
-		url string
-		err error
-	}
-	teamCh := make(chan teamURLResult, 1)
-	go func() {
-		u, err := client.GetTeamURL()
-		teamCh <- teamURLResult{u, err}
-	}()
+	teamCh := fetchTeamURLAsync(client)
 
 	// Fetch the message/thread via conversations.replies.
 	result, err := client.Call("conversations.replies", map[string]string{

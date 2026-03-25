@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -171,7 +170,7 @@ func (c *Client) CallPaginated(endpoint string, params map[string]string, cursor
 		result, err := c.Call(endpoint, p)
 		if err != nil {
 			// On rate limit, attach partial results.
-			if rlErr, ok := asRateLimitError(err); ok {
+			if rlErr, ok := AsRateLimitError(err); ok {
 				rlErr.PartialData = all
 				return all, rlErr
 			}
@@ -274,16 +273,6 @@ func (c *Client) backoffDelay(retryAfter time.Duration, hasRetryAfter bool, atte
 	base := time.Duration(math.Pow(2, float64(attempt))) * time.Second
 	jitter := time.Duration(rand.Int64N(int64(base) / 2))
 	return base + jitter
-}
-
-// asRateLimitError unwraps err into a *RateLimitError if possible,
-// using errors.As so it works with wrapped errors.
-func asRateLimitError(err error) (*RateLimitError, bool) {
-	var rlErr *RateLimitError
-	if errors.As(err, &rlErr) {
-		return rlErr, true
-	}
-	return nil, false
 }
 
 // ExtractItems pulls a slice of objects from result[collectKey].

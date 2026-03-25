@@ -118,15 +118,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start team URL fetch concurrently — it's independent of the message fetch.
-	type teamURLResult struct {
-		url string
-		err error
-	}
-	teamCh := make(chan teamURLResult, 1)
-	go func() {
-		u, err := client.GetTeamURL()
-		teamCh <- teamURLResult{u, err}
-	}()
+	teamCh := fetchTeamURLAsync(client)
 
 	// Fetch messages with progress indicator.
 	prog := progress.NewCounter("Fetching messages", format)

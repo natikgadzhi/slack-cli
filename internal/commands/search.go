@@ -14,6 +14,7 @@ import (
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
+	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
@@ -128,11 +129,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 		if text, ok := m["text"].(string); ok {
-			text = strings.TrimSpace(text)
-			if runes := []rune(text); len(runes) > 500 {
-				text = string(runes[:500])
-			}
-			r["text"] = text
+			r["text"] = formatting.TruncateRunes(strings.TrimSpace(text), 500)
 		}
 
 		if permalink, ok := m["permalink"].(string); ok {
@@ -243,16 +240,8 @@ func renderSearchTable(results []map[string]any) {
 	t := output.NewTable()
 	t.Header("CHANNEL", "TIME", "USER", "TEXT", "LINK")
 	for _, r := range results {
-		channel, _ := r["channel"].(string)
-		ts, _ := r["ts"].(string)
-		user, _ := r["user"].(string)
-		text, _ := r["text"].(string)
-		permalink, _ := r["permalink"].(string)
-
-		timeStr := internalOutput.FormatTS(ts)
-		text = truncate(text, 80)
-
-		t.Row(channel, timeStr, user, text, permalink)
+		timeStr := internalOutput.FormatTS(getString(r, "ts"))
+		t.Row(getString(r, "channel"), timeStr, getString(r, "user"), truncate(getString(r, "text"), 80), getString(r, "permalink"))
 	}
 	_ = t.Flush()
 }
