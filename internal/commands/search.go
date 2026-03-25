@@ -8,32 +8,32 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
-	"github.com/natikgadzhi/slack-cli/internal/output"
 )
 
 var searchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search Slack messages",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runSearch,
+	Example: `  slack-cli search "deployment failed" --limit 10
+  slack-cli search "from:@alice" -o json | jq '.[].text'`,
+	RunE: runSearch,
 }
 
 func init() {
-	searchCmd.Flags().Int("count", 20, "maximum number of results")
+	searchCmd.Flags().IntP("limit", "n", 20, "Maximum number of results")
 	rootCmd.AddCommand(searchCmd)
 }
 
 // runSearch searches Slack messages and renders the results.
 func runSearch(cmd *cobra.Command, args []string) error {
 	query := args[0]
-	count, _ := cmd.Flags().GetInt("count")
+	limit, _ := cmd.Flags().GetInt("limit")
 
-	format, err := parseOutputFormat()
-	if err != nil {
-		return err
-	}
+	format := output.Resolve(cmd)
 
 	// Set up client (no user resolver needed for search results).
 	client, err := setupClientOnly()
@@ -41,11 +41,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Show spinner while searching.
+	spinner := progress.NewSpinner("Searching", format)
+	spinner.Update(0)
+
 	// Call search.messages.
 	result, err := client.Call("search.messages", map[string]string{
 		"query": query,
-		"count": strconv.Itoa(count),
+		"count": strconv.Itoa(limit),
 	})
+
+	spinner.Finish()
+
 	if err != nil {
 		return fmt.Errorf("searching messages: %w", err)
 	}
@@ -94,19 +101,23 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Render output.
-	if err := output.RenderSearchResults(os.Stdout, results, format); err != nil {
-		return err
+	if output.IsJSON(format) {
+		if err := output.PrintJSON(results); err != nil {
+			return err
+		}
+	} else {
+		renderSearchTable(results)
 	}
 
 	// Cache the result (best-effort).
 	cacheSlug := cache.SearchSlug(query)
 	cacheWrite(getCache(), "search", cacheSlug, results, cache.Metadata{
-		Command: fmt.Sprintf("search %q --count %d", query, count),
+		Command: fmt.Sprintf("search %q --limit %d", query, limit),
 	})
 
-	// Write per-item files if --output-dir is set.
-	if OutputDir != "" {
-		if err := writeSearchItemFiles(OutputDir, results, query); err != nil {
+	// Write per-item files if --derived is set.
+	if DerivedDir != "" {
+		if err := writeSearchItemFiles(DerivedDir, results, query); err != nil {
 			return fmt.Errorf("writing output files: %w", err)
 		}
 	}

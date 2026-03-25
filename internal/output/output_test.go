@@ -612,25 +612,25 @@ func TestRenderSingle_Markdown_AllFieldsEmpty(t *testing.T) {
 }
 
 func TestFormatTS_Empty(t *testing.T) {
-	if got := formatTS(""); got != "" {
-		t.Errorf("formatTS(\"\") = %q, want empty", got)
+	if got := FormatTS(""); got != "" {
+		t.Errorf("FormatTS(\"\") = %q, want empty", got)
 	}
 }
 
 func TestFormatTS_Invalid(t *testing.T) {
 	// Non-parseable ts should be returned as-is.
-	if got := formatTS("not-a-number"); got != "not-a-number" {
-		t.Errorf("formatTS(\"not-a-number\") = %q, want \"not-a-number\"", got)
+	if got := FormatTS("not-a-number"); got != "not-a-number" {
+		t.Errorf("FormatTS(\"not-a-number\") = %q, want \"not-a-number\"", got)
 	}
 }
 
 func TestFormatTS_Valid(t *testing.T) {
-	got := formatTS("1741234567.000000")
+	got := FormatTS("1741234567.000000")
 	if got == "" || got == "1741234567.000000" {
-		t.Errorf("formatTS should convert to human-readable, got %q", got)
+		t.Errorf("FormatTS should convert to human-readable, got %q", got)
 	}
 	if !strings.Contains(got, "2025-03-06") {
-		t.Errorf("formatTS should contain date, got %q", got)
+		t.Errorf("FormatTS should contain date, got %q", got)
 	}
 }
 

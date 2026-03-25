@@ -45,17 +45,26 @@ func KeychainXoxdService() string {
 }
 
 // DataDir returns the base data directory for slack-cli.
-// Override with the SLACK_DATA_DIR environment variable.
-// Defaults to ~/.local/share/slack-cli/.
+// Override with SLACK_CLI_DERIVED_DIR or LAMBDAL_DERIVED_DIR env vars.
+// Defaults to ~/.local/share/lambdal/derived/slack-cli/.
 func DataDir() (string, error) {
+	// Legacy env var for backwards compatibility.
 	if v := os.Getenv("SLACK_DATA_DIR"); v != "" {
 		return v, nil
+	}
+	// Tool-specific derived dir.
+	if v := os.Getenv("SLACK_CLI_DERIVED_DIR"); v != "" {
+		return v, nil
+	}
+	// Base lambdal derived dir (tool appends its name).
+	if v := os.Getenv("LAMBDAL_DERIVED_DIR"); v != "" {
+		return filepath.Join(v, "slack-cli"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "slack-cli"), nil
+	return filepath.Join(home, ".local", "share", "lambdal", "derived", "slack-cli"), nil
 }
 
 // CacheDir returns the path to the cache directory.

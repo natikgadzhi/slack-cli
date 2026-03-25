@@ -16,9 +16,9 @@ builds:
     ldflags:
       - >-
         -s -w
-        -X github.com/natikgadzhi/slack-cli/internal/commands.Version={{.Version}}
-        -X github.com/natikgadzhi/slack-cli/internal/commands.Commit={{.Commit}}
-        -X github.com/natikgadzhi/slack-cli/internal/commands.Date={{.Date}}
+        -X github.com/natikgadzhi/slack-cli/internal/commands.buildVersion={{.Version}}
+        -X github.com/natikgadzhi/slack-cli/internal/commands.buildCommit={{.Commit}}
+        -X github.com/natikgadzhi/slack-cli/internal/commands.buildDate={{.Date}}
 
 archives:
   - id: default

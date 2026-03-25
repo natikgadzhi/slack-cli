@@ -103,45 +103,6 @@ func TestFormatMessages_PreservesFormattedFields(t *testing.T) {
 	}
 }
 
-func TestParseOutputFormat_DefaultJSON(t *testing.T) {
-	orig := OutputFormat
-	defer func() { OutputFormat = orig }()
-
-	OutputFormat = "json"
-	f, err := parseOutputFormat()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if f != "json" {
-		t.Errorf("format = %q, want json", f)
-	}
-}
-
-func TestParseOutputFormat_Markdown(t *testing.T) {
-	orig := OutputFormat
-	defer func() { OutputFormat = orig }()
-
-	OutputFormat = "markdown"
-	f, err := parseOutputFormat()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if f != "markdown" {
-		t.Errorf("format = %q, want markdown", f)
-	}
-}
-
-func TestParseOutputFormat_Invalid(t *testing.T) {
-	orig := OutputFormat
-	defer func() { OutputFormat = orig }()
-
-	OutputFormat = "xml"
-	_, err := parseOutputFormat()
-	if err == nil {
-		t.Fatal("expected error for invalid format")
-	}
-}
-
 func TestGetCache_NoCacheFlag(t *testing.T) {
 	orig := NoCache
 	defer func() { NoCache = orig }()
@@ -156,4 +117,25 @@ func TestGetCache_NoCacheFlag(t *testing.T) {
 func TestCacheWrite_NilCache(t *testing.T) {
 	// Should not panic on nil cache.
 	cacheWrite(nil, "test", "slug", map[string]string{"key": "value"}, cache.Metadata{})
+}
+
+func TestTruncate_Short(t *testing.T) {
+	got := truncate("hello", 10)
+	if got != "hello" {
+		t.Errorf("truncate = %q, want %q", got, "hello")
+	}
+}
+
+func TestTruncate_Long(t *testing.T) {
+	got := truncate("hello world this is a long string", 10)
+	if got != "hello w..." {
+		t.Errorf("truncate = %q, want %q", got, "hello w...")
+	}
+}
+
+func TestTruncate_ExactLength(t *testing.T) {
+	got := truncate("1234567890", 10)
+	if got != "1234567890" {
+		t.Errorf("truncate = %q, want %q", got, "1234567890")
+	}
 }

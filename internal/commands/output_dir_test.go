@@ -12,7 +12,7 @@ import (
 
 // ---------- validateOutputDir tests ----------
 
-func TestValidateOutputDir_ValidPath(t *testing.T) {
+func TestValidateDerivedDir_ValidPath(t *testing.T) {
 	dir := t.TempDir()
 	got, err := validateOutputDir(dir)
 	if err != nil {
@@ -23,7 +23,7 @@ func TestValidateOutputDir_ValidPath(t *testing.T) {
 	}
 }
 
-func TestValidateOutputDir_RelativePath(t *testing.T) {
+func TestValidateDerivedDir_RelativePath(t *testing.T) {
 	// A relative path should be resolved to absolute.
 	got, err := validateOutputDir("some/relative/path")
 	if err != nil {
@@ -34,7 +34,7 @@ func TestValidateOutputDir_RelativePath(t *testing.T) {
 	}
 }
 
-func TestValidateOutputDir_PathTraversal(t *testing.T) {
+func TestValidateDerivedDir_PathTraversal(t *testing.T) {
 	_, err := validateOutputDir("../../etc/passwd")
 	if err == nil {
 		t.Fatal("expected error for path traversal")
@@ -386,14 +386,14 @@ func TestWriteSearchItemFiles_SkipsResultsWithoutTS(t *testing.T) {
 	}
 }
 
-// ---------- OutputDir does not affect stdout or cache ----------
+// ---------- DerivedDir does not affect stdout or cache ----------
 
-func TestOutputDir_DoesNotAffectCacheWrite(t *testing.T) {
-	// Verify that cacheWrite still works independently when OutputDir is set.
-	origOutputDir := OutputDir
-	defer func() { OutputDir = origOutputDir }()
+func TestDerivedDir_DoesNotAffectCacheWrite(t *testing.T) {
+	// Verify that cacheWrite still works independently when DerivedDir is set.
+	origDerivedDir := DerivedDir
+	defer func() { DerivedDir = origDerivedDir }()
 
-	OutputDir = t.TempDir()
+	DerivedDir = t.TempDir()
 
 	// cacheWrite to nil cache should not panic.
 	cacheWrite(nil, "test", "slug", map[string]string{"key": "value"}, cache.Metadata{})

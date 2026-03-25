@@ -43,11 +43,6 @@ func setupClient() (*api.Client, *users.UserResolver, error) {
 	return client, resolver, nil
 }
 
-// parseOutputFormat parses the output format from the persistent flag.
-func parseOutputFormat() (output.Format, error) {
-	return output.ParseFormat(OutputFormat)
-}
-
 // getCache returns a cache instance if caching is enabled, or nil if --no-cache is set.
 func getCache() *cache.Cache {
 	if NoCache {
@@ -74,11 +69,6 @@ func cacheWrite(c *cache.Cache, objectType, slug string, data any, meta cache.Me
 	if err := c.Put(objectType, slug, content, meta); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: cache write failed: %v\n", err)
 	}
-}
-
-// clearProgress clears the stderr progress line using ANSI escape (erase to end of line).
-func clearProgress() {
-	fmt.Fprintf(os.Stderr, "\r\033[K")
 }
 
 // formatMessages converts raw Slack messages to formatted Messages with permalinks.

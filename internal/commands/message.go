@@ -6,17 +6,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
-	"github.com/natikgadzhi/slack-cli/internal/output"
+	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
 var messageCmd = &cobra.Command{
 	Use:   "message <url>",
 	Short: "Fetch a single Slack message or thread by URL",
 	Args:  cobra.ExactArgs(1),
-	RunE:  runMessage,
+	Example: `  slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+  slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' -o json`,
+	RunE: runMessage,
 }
 
 func init() {
@@ -28,10 +31,7 @@ func init() {
 func runMessage(cmd *cobra.Command, args []string) error {
 	rawURL := args[0]
 
-	format, err := parseOutputFormat()
-	if err != nil {
-		return err
-	}
+	format := output.Resolve(cmd)
 
 	// Parse the Slack URL.
 	channelID, messageTS, threadTS, err := formatting.ParseSlackURL(rawURL)
@@ -94,8 +94,15 @@ func runMessage(cmd *cobra.Command, args []string) error {
 
 	// Format and render (always as a list — single message is just len=1).
 	formatted := formatMessages(messages, teamURL, channelID, teamErr == nil)
-	if err := output.RenderMessages(os.Stdout, formatted, format); err != nil {
-		return err
+
+	if output.IsJSON(format) {
+		if err := output.PrintJSON(formatted); err != nil {
+			return err
+		}
+	} else {
+		if err := internalOutput.RenderMessages(os.Stdout, formatted, internalOutput.Markdown); err != nil {
+			return err
+		}
 	}
 
 	// Cache the result (best-effort).
@@ -105,10 +112,10 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		Command:   fmt.Sprintf("message %s", rawURL),
 	})
 
-	// Write per-item files if --output-dir is set.
+	// Write per-item files if --derived is set.
 	// For the message command, thread root + replies go into ONE file.
-	if OutputDir != "" {
-		if err := writeThreadFile(OutputDir, formatted, channelID, "", fetchTS, rawURL); err != nil {
+	if DerivedDir != "" {
+		if err := writeThreadFile(DerivedDir, formatted, channelID, "", fetchTS, rawURL); err != nil {
 			return fmt.Errorf("writing output files: %w", err)
 		}
 	}
