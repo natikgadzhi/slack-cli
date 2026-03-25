@@ -15,23 +15,49 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
-	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
 )
 
-var channelCmd = &cobra.Command{
-	Use:   "channel <name|id>",
+// channelsCmd is the parent command for channel-related subcommands.
+var channelsCmd = &cobra.Command{
+	Use:   "channels",
+	Short: "Manage and view Slack channels",
+}
+
+// channelsGetCmd fetches messages from a Slack channel.
+var channelsGetCmd = &cobra.Command{
+	Use:   "get <name|id>",
 	Short: "Fetch messages from a Slack channel",
 	Args:  cobra.ExactArgs(1),
-	Example: `  slack-cli channel general --since 2d --limit 100
-  slack-cli channel C12345678 --since 2026-03-01 --until 2026-03-10
-  slack-cli channel general -o json | jq '.[].text'`,
+	Example: `  slack-cli channels get general --since 2d --limit 100
+  slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
+  slack-cli channels get general -o json | jq '.[].text'`,
 	RunE: runChannel,
 }
 
+// channelCmd is a hidden backward-compatible alias for "channels get".
+var channelCmd = &cobra.Command{
+	Use:        "channel <name|id>",
+	Short:      "Fetch messages from a Slack channel",
+	Hidden:     true,
+	Deprecated: "use 'channels get' instead",
+	Args:       cobra.ExactArgs(1),
+	RunE:       runChannel,
+}
+
 func init() {
+	// Register flags on the "channels get" subcommand.
+	channelsGetCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
+	channelsGetCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
+	channelsGetCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
+
+	// Register the same flags on the deprecated "channel" alias.
 	channelCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
 	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
+
+	// Wire up the command tree.
+	channelsCmd.AddCommand(channelsGetCmd)
+	rootCmd.AddCommand(channelsCmd)
 	rootCmd.AddCommand(channelCmd)
 }
 
@@ -193,6 +219,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cache the result (best-effort).
+	// Keep "channel" slug for cache compatibility.
 	cacheSlug := cache.ChannelHistorySlug(channelID, sinceStr, untilStr)
 	cacheWrite(getCache(), "channel", cacheSlug, formatted, cache.Metadata{
 		Command: fmt.Sprintf("channel %s --since %s --until %s --limit %d", nameOrID, since, until, limit),
@@ -223,25 +250,6 @@ func renderMessagesTable(messages []formatting.Message) {
 	for _, msg := range messages {
 		text := truncate(msg.Text, 80)
 		t.Row(msg.Time, msg.User, text, msg.Link)
-	}
-	_ = t.Flush()
-}
-
-// renderSearchTable renders search results as a table to stdout.
-func renderSearchTable(results []map[string]any) {
-	t := output.NewTable()
-	t.Header("CHANNEL", "TIME", "USER", "TEXT", "LINK")
-	for _, r := range results {
-		channel, _ := r["channel"].(string)
-		ts, _ := r["ts"].(string)
-		user, _ := r["user"].(string)
-		text, _ := r["text"].(string)
-		permalink, _ := r["permalink"].(string)
-
-		timeStr := internalOutput.FormatTS(ts)
-		text = truncate(text, 80)
-
-		t.Row(channel, timeStr, user, text, permalink)
 	}
 	_ = t.Flush()
 }

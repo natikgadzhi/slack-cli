@@ -120,7 +120,7 @@ func TestHelp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--help failed: %v", err)
 	}
-	for _, cmd := range []string{"auth", "message", "channel", "search"} {
+	for _, cmd := range []string{"auth", "message", "channels", "search"} {
 		if !strings.Contains(stdout, cmd) {
 			t.Errorf("--help missing %q command", cmd)
 		}
@@ -225,9 +225,9 @@ func TestChannelSmoke(t *testing.T) {
 	requireCreds(t)
 	channel := envOrDefault("SLACK_TEST_CHANNEL", "general")
 
-	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "json", "--since", "30d", "--limit", "5", channel)
+	stdout, stderr, err := runBinary(t, nil, "channels", "get", "-o", "json", "--since", "30d", "--limit", "5", channel)
 	if err != nil {
-		t.Fatalf("channel failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("channels get failed: %v\nstderr: %s", err, stderr)
 	}
 
 	var messages []map[string]any
@@ -252,9 +252,9 @@ func TestChannelMarkdown(t *testing.T) {
 	requireCreds(t)
 	channel := envOrDefault("SLACK_TEST_CHANNEL", "general")
 
-	stdout, stderr, err := runBinary(t, nil, "channel", "-o", "markdown", "--since", "30d", "--limit", "3", channel)
+	stdout, stderr, err := runBinary(t, nil, "channels", "get", "-o", "markdown", "--since", "30d", "--limit", "3", channel)
 	if err != nil {
-		t.Fatalf("channel markdown failed: %v\nstderr: %s", err, stderr)
+		t.Fatalf("channels get markdown failed: %v\nstderr: %s", err, stderr)
 	}
 	if !strings.Contains(stdout, "##") {
 		t.Errorf("markdown output missing '##' header: %s", truncate(stdout, 300))
