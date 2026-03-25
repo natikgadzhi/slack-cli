@@ -35,7 +35,8 @@ var rootCmd = &cobra.Command{
   slack-cli channel general --since 2d --limit 100
   slack-cli channel C12345678 --since 2026-03-01 --until 2026-03-10
   slack-cli search "deployment failed" --limit 10
-  slack-cli search "from:@alice" -o json | jq '.[] | .text'`,
+  slack-cli search "from:@alice" -o json | jq '.[] | .text'
+  slack-cli users --limit 50`,
 }
 
 func init() {
