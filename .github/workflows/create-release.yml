@@ -97,4 +97,13 @@ jobs:
           git tag -a "$NEXT_VERSION" -F /tmp/changelog.md
           git push origin "$NEXT_VERSION"
 
-          echo "Pushed tag $NEXT_VERSION — this will trigger the release workflow."
+          echo "Pushed tag $NEXT_VERSION"
+
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT_VERSION="${{ steps.next-version.outputs.version }}"
+          # GITHUB_TOKEN pushes don't trigger other workflows, so explicitly trigger release
+          gh workflow run release.yml --ref "$NEXT_VERSION"
+          echo "Triggered release workflow for $NEXT_VERSION"
