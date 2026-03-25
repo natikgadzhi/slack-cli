@@ -189,11 +189,10 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		Command: fmt.Sprintf("channel %s --since %s --until %s --limit %d", nameOrID, since, until, limit),
 	})
 
-	// Write per-item files if --derived is set.
+	// Write per-item files if --derived flag was explicitly set.
 	// For the channel command, each message gets its own file.
-	if DerivedDir != "" {
-		// Use the original input as channel name context (falls back to channelID inside writeItemFiles).
-		if err := writeItemFiles(DerivedDir, formatted, channelID, nameOrID); err != nil {
+	if derivedDir := resolveDerivedDir(cmd); derivedDir != "" {
+		if err := writeItemFiles(derivedDir, formatted, channelID, nameOrID); err != nil {
 			return fmt.Errorf("writing derived files: %w", err)
 		}
 	}

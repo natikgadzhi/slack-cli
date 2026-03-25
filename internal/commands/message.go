@@ -117,11 +117,11 @@ func runMessage(cmd *cobra.Command, args []string) error {
 		Command:   fmt.Sprintf("message %s", rawURL),
 	})
 
-	// Write per-item files if --derived is set.
+	// Write per-item files if --derived flag was explicitly set.
 	// For the message command, thread root + replies go into ONE file.
-	if DerivedDir != "" {
-		if err := writeThreadFile(DerivedDir, formatted, channelID, "", fetchTS, rawURL); err != nil {
-			return fmt.Errorf("writing output files: %w", err)
+	if derivedDir := resolveDerivedDir(cmd); derivedDir != "" {
+		if err := writeThreadFile(derivedDir, formatted, channelID, "", fetchTS, rawURL); err != nil {
+			return fmt.Errorf("writing derived files: %w", err)
 		}
 	}
 

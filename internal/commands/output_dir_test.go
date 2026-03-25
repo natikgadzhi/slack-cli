@@ -386,15 +386,10 @@ func TestWriteSearchItemFiles_SkipsResultsWithoutTS(t *testing.T) {
 	}
 }
 
-// ---------- DerivedDir does not affect stdout or cache ----------
+// ---------- derived flag does not affect stdout or cache ----------
 
-func TestDerivedDir_DoesNotAffectCacheWrite(t *testing.T) {
-	// Verify that cacheWrite still works independently when DerivedDir is set.
-	origDerivedDir := DerivedDir
-	defer func() { DerivedDir = origDerivedDir }()
-
-	DerivedDir = t.TempDir()
-
+func TestDerivedFlag_DoesNotAffectCacheWrite(t *testing.T) {
+	// Verify that cacheWrite still works independently.
 	// cacheWrite to nil cache should not panic.
 	cacheWrite(nil, "test", "slug", map[string]string{"key": "value"}, cache.Metadata{})
 }

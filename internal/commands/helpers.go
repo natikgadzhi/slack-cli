@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
@@ -15,6 +17,20 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/output"
 	"github.com/natikgadzhi/slack-cli/internal/users"
 )
+
+// resolveDerivedDir returns the derived directory path if the --derived flag was
+// explicitly set on the command line. Returns "" if the flag was not set,
+// preserving the original behavior of only writing derived files on explicit request.
+func resolveDerivedDir(cmd *cobra.Command) string {
+	f := cmd.Flags().Lookup("derived")
+	if f == nil {
+		f = cmd.PersistentFlags().Lookup("derived")
+	}
+	if f != nil && f.Changed {
+		return f.Value.String()
+	}
+	return ""
+}
 
 // setupClientOnly creates an API client from stored credentials without a user resolver.
 // Used by commands that don't need user resolution (e.g. search).

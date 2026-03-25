@@ -120,10 +120,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		Command: fmt.Sprintf("search %q --limit %d", query, limit),
 	})
 
-	// Write per-item files if --derived is set.
-	if DerivedDir != "" {
-		if err := writeSearchItemFiles(DerivedDir, results, query); err != nil {
-			return fmt.Errorf("writing output files: %w", err)
+	// Write per-item files if --derived flag was explicitly set.
+	if derivedDir := resolveDerivedDir(cmd); derivedDir != "" {
+		if err := writeSearchItemFiles(derivedDir, results, query); err != nil {
+			return fmt.Errorf("writing derived files: %w", err)
 		}
 	}
 

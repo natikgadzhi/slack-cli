@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"github.com/natikgadzhi/cli-kit/derived"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/version"
 	"github.com/spf13/cobra"
@@ -15,10 +16,7 @@ var (
 )
 
 // Persistent flag values accessible to subcommands.
-var (
-	NoCache    bool
-	DerivedDir string
-)
+var NoCache bool
 
 // versionInfo is populated at init time from build-time vars.
 var versionInfo = &version.Info{
@@ -44,8 +42,10 @@ func init() {
 	// Register cli-kit output flag (-o/--output with TTY auto-detection).
 	output.RegisterFlag(rootCmd)
 
+	// Register cli-kit derived flag (-d/--derived with env var fallback).
+	derived.RegisterFlag(rootCmd, "slack-cli")
+
 	rootCmd.PersistentFlags().BoolVar(&NoCache, "no-cache", false, "Skip cache for this request")
-	rootCmd.PersistentFlags().StringVarP(&DerivedDir, "derived", "d", "", "Derived data directory (default: ~/.local/share/lambdal/derived/slack-cli)")
 	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug logging to stderr")
 
 	rootCmd.SilenceErrors = true

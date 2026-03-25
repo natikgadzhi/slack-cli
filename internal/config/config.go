@@ -3,9 +3,10 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/natikgadzhi/cli-kit/derived"
 )
 
 // SlackAPIBase is the base URL for the Slack Web API.
@@ -45,8 +46,8 @@ func KeychainXoxdService() string {
 }
 
 // DataDir returns the base data directory for slack-cli.
-// Override with SLACK_CLI_DERIVED_DIR or LAMBDAL_DERIVED_DIR env vars.
-// Defaults to ~/.local/share/lambdal/derived/slack-cli/.
+// Override with SLACK_DATA_DIR, SLACK_CLI_DERIVED_DIR, or LAMBDAL_DERIVED_DIR env vars.
+// Defaults to ~/.local/share/lambdal/derived/slack-cli/ (via cli-kit/derived).
 func DataDir() (string, error) {
 	// Legacy env var for backwards compatibility.
 	if v := os.Getenv("SLACK_DATA_DIR"); v != "" {
@@ -60,11 +61,8 @@ func DataDir() (string, error) {
 	if v := os.Getenv("LAMBDAL_DERIVED_DIR"); v != "" {
 		return filepath.Join(v, "slack-cli"), nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-	return filepath.Join(home, ".local", "share", "lambdal", "derived", "slack-cli"), nil
+	// Use cli-kit/derived default path.
+	return derived.DefaultPath("slack-cli"), nil
 }
 
 // CacheDir returns the path to the cache directory.

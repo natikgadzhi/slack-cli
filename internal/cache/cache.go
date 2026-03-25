@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/natikgadzhi/cli-kit/derived"
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 
@@ -24,16 +25,16 @@ func NewCache() (*Cache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cache: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := derived.EnsureDir(dir); err != nil {
 		return nil, fmt.Errorf("cache: create base dir: %w", err)
 	}
 	return &Cache{baseDir: dir}, nil
 }
 
 // NewCacheWithDir creates a Cache rooted at the given directory.
-// Useful for testing.
+// Useful for testing and the --derived flag.
 func NewCacheWithDir(dir string) (*Cache, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := derived.EnsureDir(dir); err != nil {
 		return nil, fmt.Errorf("cache: create base dir: %w", err)
 	}
 	return &Cache{baseDir: dir}, nil

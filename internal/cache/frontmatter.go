@@ -1,6 +1,10 @@
 // Package cache provides a Markdown-based caching layer with YAML frontmatter.
 // Each cached object is stored as a Markdown file with structured metadata
 // in the YAML frontmatter block.
+//
+// The base frontmatter schema (tool, object_type, slug, timestamps) follows
+// the cli-kit/derived.Frontmatter convention. This package extends it with
+// Slack-specific fields (channel, channel_id, user, thread_ts).
 package cache
 
 import (
