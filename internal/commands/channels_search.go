@@ -32,6 +32,9 @@ func init() {
 	channelsCmd.AddCommand(channelsSearchCmd)
 }
 
+// maxSearchPages caps pagination to prevent runaway searches in large workspaces.
+const maxSearchPages = 50
+
 // runChannelsSearch paginates conversations.list and filters channels whose
 // name contains the query as a case-insensitive substring.
 func runChannelsSearch(cmd *cobra.Command, args []string) error {
@@ -48,13 +51,14 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Show spinner while searching.
-	spinner := progress.NewSpinner("Searching channels", format)
-	spinner.Update(0)
+	// Show progress while searching.
+	prog := progress.NewCounter("Searching channels", format)
 
 	var matched []map[string]any
 	var isPartial bool
+	var scanned int
 	pageSize := 200
+	pages := 0
 
 	params := map[string]string{
 		"limit": strconv.Itoa(pageSize),
@@ -66,9 +70,11 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	for {
+		prog.Update(scanned)
+
 		result, err := client.Call("conversations.list", params)
 		if err != nil {
-			spinner.Finish()
+			prog.Finish()
 
 			// On rate limit with partial data, warn and render what we have.
 			if _, ok := api.AsRateLimitError(err); ok && len(matched) > 0 {
@@ -85,7 +91,10 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("searching channels: %w", err)
 		}
 
+		pages++
 		channels := api.ExtractItems(result, "channels")
+		scanned += len(channels)
+
 		for _, ch := range channels {
 			if matchesChannelName(ch, query) {
 				matched = append(matched, ch)
@@ -105,10 +114,19 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 			break
 		}
 
+		// Safety valve: don't paginate forever in large workspaces.
+		if pages >= maxSearchPages {
+			if !output.IsJSON(format) {
+				clierrors.PrintWarning(fmt.Sprintf("stopped after scanning %d channels across %d pages; results may be incomplete", scanned, pages), output.IsJSON(format))
+			}
+			isPartial = true
+			break
+		}
+
 		params["cursor"] = cursor
 	}
 
-	spinner.Finish()
+	prog.Finish()
 
 	if len(matched) == 0 {
 		if !output.IsJSON(format) {

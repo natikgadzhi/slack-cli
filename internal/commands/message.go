@@ -6,6 +6,7 @@ import (
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
+	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
@@ -54,12 +55,18 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	// Start team URL fetch concurrently — it's independent of the message fetch.
 	teamCh := fetchTeamURLAsync(client)
 
+	// Show spinner while fetching.
+	spinner := progress.NewSpinner("Fetching message", format)
+
 	// Fetch the message/thread via conversations.replies.
 	result, err := client.Call("conversations.replies", map[string]string{
 		"channel": channelID,
 		"ts":      fetchTS,
 		"limit":   "200",
 	})
+
+	spinner.Finish()
+
 	if err != nil {
 		if cliErr, ok := api.AsCLIError(err); ok {
 			clierrors.PrintError(cliErr, output.IsJSON(format))

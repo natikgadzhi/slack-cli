@@ -47,9 +47,11 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 	// First pass: active channels only.
 	id, err := paginateChannels(client, nameOrID, true, progress, verbose)
 	if err != nil {
+		clearProgress(progress)
 		return "", err
 	}
 	if id != "" {
+		clearProgress(progress)
 		return id, nil
 	}
 
@@ -59,15 +61,15 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 	}
 	id, err = paginateChannels(client, nameOrID, false, progress, verbose)
 	if err != nil {
+		clearProgress(progress)
 		return "", err
 	}
 	if id != "" {
+		clearProgress(progress)
 		return id, nil
 	}
 
-	if progress != nil {
-		_, _ = fmt.Fprintf(progress, "\n")
-	}
+	clearProgress(progress)
 	return "", fmt.Errorf("channel not found: %q", nameOrID)
 }
 
@@ -111,9 +113,6 @@ func paginateChannels(client *api.Client, name string, excludeArchived bool, pro
 		}
 
 		if id := findChannelByName(channels, name); id != "" {
-			if progress != nil {
-				_, _ = fmt.Fprintf(progress, "\n")
-			}
 			return id, nil
 		}
 
@@ -123,13 +122,17 @@ func paginateChannels(client *api.Client, name string, excludeArchived bool, pro
 		}
 
 		if pages >= maxPages {
-			if progress != nil {
-				_, _ = fmt.Fprintf(progress, "\n")
-			}
 			return "", fmt.Errorf("channel %q not found after checking %d channels across %d pages (try using the channel ID instead)", name, checked, pages)
 		}
 
 		params["cursor"] = cursor
+	}
+}
+
+// clearProgress clears the current progress line from stderr.
+func clearProgress(w io.Writer) {
+	if w != nil {
+		_, _ = fmt.Fprintf(w, "\r\033[K")
 	}
 }
 
