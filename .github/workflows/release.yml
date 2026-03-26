@@ -2,19 +2,86 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 jobs:
+  create-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute new version
+        id: bump
+        run: |
+          # Get latest tag, default to v0.0.0 if none exist
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST"
+
+          # Strip 'v' prefix and pre-release suffix (e.g., -rc1, -beta.2)
+          VERSION="${LATEST#v}"
+          VERSION="${VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Bump the appropriate component
+          BUMP="${{ inputs.version_bump }}"
+          case "$BUMP" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *) echo "Unknown bump type: $BUMP"; exit 1 ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          NEW_TAG="${{ steps.bump.outputs.new_tag }}"
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Error: Tag $NEW_TAG already exists"
+            exit 1
+          fi
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+
   release:
+    if: "!cancelled() && (github.event_name == 'push' || needs.create-tag.result == 'success')"
+    needs: [create-tag]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.create-tag.outputs.new_tag || github.ref }}
 
       - uses: actions/setup-go@v5
         with:
