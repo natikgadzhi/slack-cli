@@ -153,6 +153,18 @@ tasks/
 - Task files contain the full specification: objective, acceptance criteria, dependencies, and notes
 - Moving task files between directories should be committed as part of the worker's branch
 
+## Releases
+
+Releases are handled by a single unified workflow in `.github/workflows/release.yml`. To cut a release:
+
+```sh
+gh workflow run release.yml --field version_bump=patch  # or minor, or major
+```
+
+This creates a tag and runs GoReleaser in one workflow. Do NOT use separate workflows to create tags and trigger releases — `GITHUB_TOKEN` cannot dispatch cross-workflow events.
+
+When upgrading shared dependencies like `cli-kit`, the process is: upgrade, test, build, commit, push to main, then trigger the release workflow.
+
 ## Important Rules
 
 - **Always fetch before checking task status** — run `git fetch` and `git pull --ff` before answering questions about whether a task is done, what's been merged, or what state the codebase is in. Workers may have merged PRs that your local main doesn't have yet.

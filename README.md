@@ -66,30 +66,167 @@ Environment variables take precedence over Keychain values.
 slack-cli --help
 slack-cli auth check
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
-slack-cli channel general --since 2d --limit 100
-slack-cli channel C12345678 --since 2026-03-01 --until 2026-03-10
-slack-cli search "deployment failed" --count 10
+slack-cli channels get general --since 2d --limit 100
+slack-cli channels list
+slack-cli channels search eng
+slack-cli search "deployment failed" --limit 10
+slack-cli users
 ```
 
-### Commands
+## Global flags
 
-| Command   | Description                                  |
-|-----------|----------------------------------------------|
-| `auth`    | Manage Slack authentication tokens           |
-| `message` | Fetch a single Slack message or thread by URL|
-| `channel` | Fetch messages from a Slack channel          |
-| `search`  | Search Slack messages                        |
+| Flag | Description |
+|------|-------------|
+| `-o`, `--output` | Output format: `json` or `table` (default: auto-detected; table in TTY, json when piped) |
+| `--no-cache` | Skip cache for this request |
+| `--debug` | Enable debug logging to stderr |
+| `-d`, `--derived` | Derived data directory (default: `~/.local/share/lambdal/derived/slack-cli`) |
+| `--version` | Show version information |
 
-### Output formats
+## Commands
 
-Use the `-o` flag to choose an output format:
+### `auth check`
 
-- `-o json` (default) -- pretty-printed JSON
-- `-o markdown` (or `-o md`) -- human-readable Markdown
+Check if Slack tokens are configured and valid.
 
-### Cache
+```sh
+slack-cli auth check
+```
 
-Results are cached as Markdown files with YAML frontmatter in `~/.local/share/slack-cli/`. Override the data directory with the `SLACK_DATA_DIR` environment variable.
+### `auth set-xoxc`
+
+Store an xoxc token in the macOS Keychain.
+
+```sh
+slack-cli auth set-xoxc xoxc-...
+```
+
+### `auth set-xoxd`
+
+Store an xoxd cookie in the macOS Keychain.
+
+```sh
+slack-cli auth set-xoxd xoxd-...
+```
+
+### `message`
+
+Fetch a single Slack message or thread by URL.
+
+```sh
+slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' -o json
+```
+
+Fetches the message and all thread replies, resolves user IDs to display names, and generates permalinks.
+
+### `channels get`
+
+Fetch messages from a Slack channel by name or ID.
+
+```sh
+slack-cli channels get general --since 2d --limit 100
+slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
+slack-cli channels get general -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--since` | | Start time (relative like `2d`, or absolute like `2026-03-01`) |
+| `--until` | | End time |
+| `-n`, `--limit` | `50` | Maximum number of messages to fetch |
+
+### `channels list`
+
+List channels and conversations.
+
+```sh
+slack-cli channels list
+slack-cli channels list --limit 50
+slack-cli channels list --type public_channel,private_channel,mpim,im
+slack-cli channels list --include-archived
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `100` | Maximum number of channels to return |
+| `--type` | `public_channel,private_channel` | Comma-separated conversation types |
+| `--include-archived` | `false` | Include archived channels |
+
+### `channels search`
+
+Search channels by name (case-insensitive substring match).
+
+```sh
+slack-cli channels search eng
+slack-cli channels search "product" --type public_channel,private_channel,mpim,im
+slack-cli channels search infra --include-archived
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `20` | Maximum number of results |
+| `--type` | `public_channel,private_channel,mpim,im` | Conversation types to search |
+| `--include-archived` | `false` | Include archived channels |
+
+### `search`
+
+Search Slack messages.
+
+```sh
+slack-cli search "deployment failed" --limit 10
+slack-cli search --from alice "deployment"
+slack-cli search --from U12345 --sort recent
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `20` | Maximum number of results |
+| `--from` | | Filter by user (handle or user ID) |
+| `--sort` | `relevance` | Sort order: `relevance` or `recent` |
+
+At least one of a query argument or `--from` is required.
+
+### `users`
+
+List workspace users.
+
+```sh
+slack-cli users
+slack-cli users --limit 50
+slack-cli users --include-bots --include-deactivated
+slack-cli users -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `100` | Maximum number of users |
+| `--include-bots` | `false` | Include bot users |
+| `--include-deactivated` | `false` | Include deactivated users |
+
+### `version`
+
+Print version information as JSON.
+
+```sh
+slack-cli version
+slack-cli --version
+```
+
+## Output formats
+
+All commands support the `-o` flag:
+
+| Format | Flag | Description |
+|--------|------|-------------|
+| Table | `-o table` | Human-readable aligned columns |
+| JSON | `-o json` | Structured JSON |
+
+When no `-o` flag is provided, slack-cli auto-detects: **table** when stdout is a TTY, **json** when piped or redirected.
+
+## Cache
+
+Results are cached as Markdown files with YAML frontmatter in `~/.local/share/lambdal/derived/slack-cli/`. Override with `SLACK_DATA_DIR`, `SLACK_CLI_DERIVED_DIR`, or `LAMBDAL_DERIVED_DIR` environment variables.
 
 To skip the cache for a request, pass the `--no-cache` flag:
 
@@ -106,12 +243,4 @@ make vet        # go vet
 make lint       # golangci-lint
 make e2e        # end-to-end tests (requires valid Slack credentials)
 make clean      # remove build artifacts
-```
-
-Or run Go commands directly:
-
-```sh
-go build ./cmd/slack-cli
-go test ./...
-go vet ./...
 ```
