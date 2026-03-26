@@ -3,7 +3,7 @@ module github.com/natikgadzhi/slack-cli
 go 1.26.1
 
 require (
-	github.com/natikgadzhi/cli-kit v0.0.1
+	github.com/natikgadzhi/cli-kit v0.1.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.20.0
 )
