@@ -39,7 +39,7 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 
 	if progress != nil {
 		client.OnRateLimit = func(endpoint string, delay time.Duration, attempt int) {
-			fmt.Fprintf(progress, "\r  [rate limited] waiting %s (retry %d)...", delay.Round(time.Millisecond), attempt+1)
+			_, _ = fmt.Fprintf(progress, "\r  [rate limited] waiting %s (retry %d)...", delay.Round(time.Millisecond), attempt+1)
 		}
 		defer func() { client.OnRateLimit = nil }()
 	}
@@ -55,7 +55,7 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 
 	// Second pass: include archived channels.
 	if progress != nil {
-		fmt.Fprintf(progress, "\rNot found in active channels, checking archived...")
+		_, _ = fmt.Fprintf(progress, "\rNot found in active channels, checking archived...")
 	}
 	id, err = paginateChannels(client, nameOrID, false, progress, verbose)
 	if err != nil {
@@ -66,7 +66,7 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 	}
 
 	if progress != nil {
-		fmt.Fprintf(progress, "\n")
+		_, _ = fmt.Fprintf(progress, "\n")
 	}
 	return "", fmt.Errorf("channel not found: %q", nameOrID)
 }
@@ -97,7 +97,7 @@ func paginateChannels(client *api.Client, name string, excludeArchived bool, pro
 		checked += len(channels)
 
 		if progress != nil {
-			fmt.Fprintf(progress, "\rChecked %d channels across %d pages...", checked, pages)
+			_, _ = fmt.Fprintf(progress, "\rChecked %d channels across %d pages...", checked, pages)
 		}
 
 		if verbose && progress != nil {
@@ -105,14 +105,14 @@ func paginateChannels(client *api.Client, name string, excludeArchived bool, pro
 				n, _ := ch["name"].(string)
 				nn, _ := ch["name_normalized"].(string)
 				id, _ := ch["id"].(string)
-				fmt.Fprintf(progress, "\n  [debug] %s  name=%q  name_normalized=%q", id, n, nn)
+				_, _ = fmt.Fprintf(progress, "\n  [debug] %s  name=%q  name_normalized=%q", id, n, nn)
 			}
-			fmt.Fprintf(progress, "\n")
+			_, _ = fmt.Fprintf(progress, "\n")
 		}
 
 		if id := findChannelByName(channels, name); id != "" {
 			if progress != nil {
-				fmt.Fprintf(progress, "\n")
+				_, _ = fmt.Fprintf(progress, "\n")
 			}
 			return id, nil
 		}
@@ -124,7 +124,7 @@ func paginateChannels(client *api.Client, name string, excludeArchived bool, pro
 
 		if pages >= maxPages {
 			if progress != nil {
-				fmt.Fprintf(progress, "\n")
+				_, _ = fmt.Fprintf(progress, "\n")
 			}
 			return "", fmt.Errorf("channel %q not found after checking %d channels across %d pages (try using the channel ID instead)", name, checked, pages)
 		}

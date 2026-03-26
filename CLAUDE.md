@@ -65,6 +65,7 @@ Workers are spawned by the lead via the `Agent` tool. The lead passes the task I
 6. **Verify the work** — run the project's quality checks:
    - `go build ./...` — builds cleanly
    - `go vet ./...` — no vet errors
+   - `golangci-lint run ./...` — no lint errors
    - `go test ./...` — all tests pass
 7. **Commit the work** with a descriptive message (include task ID):
    - Format: `[task-N] <description>`
@@ -99,6 +100,7 @@ Reviewers are spawned by the lead with the PR number and task ID in their prompt
 3. **Run all quality checks**:
    - `go build ./...` — builds cleanly
    - `go vet ./...` — no vet errors
+   - `golangci-lint run ./...` — no lint errors
    - `go test ./...` — all tests pass (including new tests for the feature)
 4. **Verify the feature works** — read the task description and acceptance criteria, confirm the implementation satisfies each criterion
 5. **Code quality review**:
