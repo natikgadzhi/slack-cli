@@ -176,3 +176,4 @@ When upgrading shared dependencies like `cli-kit`, the process is: upgrade, test
 - **No premature abstraction** — build what's needed, not what might be needed
 - **Commit early and often** — small atomic commits, not monolithic ones
 - **Always verify with end-to-end tests** — business logic correctness matters, not just code presence
+- **Keep README.md in sync** — when adding, removing, or renaming commands, flags, or changing output formats, update README.md with correct usage examples, flag tables, and command descriptions. The README is the user-facing documentation and must always reflect the current CLI surface.
