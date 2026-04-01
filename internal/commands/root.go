@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"github.com/natikgadzhi/cli-kit/debug"
 	"github.com/natikgadzhi/cli-kit/derived"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/version"
@@ -47,7 +48,9 @@ func init() {
 	derived.RegisterFlag(rootCmd, "slack-cli")
 
 	rootCmd.PersistentFlags().BoolVar(&NoCache, "no-cache", false, "Skip cache for this request")
-	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug logging to stderr")
+
+	// Register cli-kit debug flag (--debug with PersistentPreRunE wiring).
+	debug.RegisterFlag(rootCmd)
 
 	rootCmd.SilenceErrors = true
 	rootCmd.SilenceUsage = true

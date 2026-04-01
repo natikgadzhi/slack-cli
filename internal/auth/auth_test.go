@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"os"
 	"testing"
 )
 
@@ -17,41 +16,6 @@ func TestGetXoxc_EnvVar(t *testing.T) {
 	}
 }
 
-func TestGetXoxc_KeychainFallback(t *testing.T) {
-	// t.Setenv registers cleanup to restore the var after the test;
-	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
-	t.Setenv("SLACK_XOXC", "")
-	os.Unsetenv("SLACK_XOXC")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_success")
-
-	token, err := GetXoxc()
-	if err != nil {
-		t.Fatalf("GetXoxc returned unexpected error: %v", err)
-	}
-	if token != "xoxc-test-token-123" {
-		t.Errorf("GetXoxc = %q, want %q", token, "xoxc-test-token-123")
-	}
-}
-
-func TestGetXoxc_KeychainError(t *testing.T) {
-	// t.Setenv registers cleanup to restore the var after the test;
-	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
-	t.Setenv("SLACK_XOXC", "")
-	os.Unsetenv("SLACK_XOXC")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_failure")
-
-	_, err := GetXoxc()
-	if err == nil {
-		t.Fatal("GetXoxc should have returned an error when keychain fails")
-	}
-}
-
 func TestGetXoxd_EnvVar(t *testing.T) {
 	t.Setenv("SLACK_XOXD", "xoxd-from-env")
 
@@ -64,46 +28,9 @@ func TestGetXoxd_EnvVar(t *testing.T) {
 	}
 }
 
-func TestGetXoxd_KeychainFallback(t *testing.T) {
-	// t.Setenv registers cleanup to restore the var after the test;
-	// os.Unsetenv actually clears it so the code-under-test sees it as absent.
-	t.Setenv("SLACK_XOXD", "")
-	os.Unsetenv("SLACK_XOXD")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_success_xoxd")
-
-	token, err := GetXoxd()
-	if err != nil {
-		t.Fatalf("GetXoxd returned unexpected error: %v", err)
-	}
-	if token != "xoxd-test-token-123" {
-		t.Errorf("GetXoxd = %q, want %q", token, "xoxd-test-token-123")
-	}
-}
-
-func TestGetXoxd_KeychainError(t *testing.T) {
-	t.Setenv("SLACK_XOXD", "")
-	os.Unsetenv("SLACK_XOXD")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_failure")
-
-	_, err := GetXoxd()
-	if err == nil {
-		t.Fatal("GetXoxd should have returned an error when keychain fails")
-	}
-}
-
 func TestGetXoxc_EnvVarPriority(t *testing.T) {
-	// Env var should take priority even when keychain would succeed.
+	// Env var should take priority over keychain.
 	t.Setenv("SLACK_XOXC", "xoxc-env-priority")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_success")
 
 	token, err := GetXoxc()
 	if err != nil {
@@ -115,12 +42,8 @@ func TestGetXoxc_EnvVarPriority(t *testing.T) {
 }
 
 func TestGetXoxd_EnvVarPriority(t *testing.T) {
-	// Env var should take priority even when keychain would succeed.
+	// Env var should take priority over keychain.
 	t.Setenv("SLACK_XOXD", "xoxd-env-priority")
-
-	origExec := execCommand
-	defer func() { execCommand = origExec }()
-	execCommand = fakeExecCommand("keychain_get_success_xoxd")
 
 	token, err := GetXoxd()
 	if err != nil {

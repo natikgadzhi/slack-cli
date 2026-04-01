@@ -4,36 +4,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/natikgadzhi/cli-kit/debug"
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/cli-kit/ratelimit"
 
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 
 const (
-	defaultTimeout    = 30 * time.Second
-	defaultMaxRetries = 5
-	defaultPageDelay  = 100 * time.Millisecond
+	defaultTimeout  = 30 * time.Second
+	defaultPageDelay = 100 * time.Millisecond
 )
 
 // Client is an HTTP client for the Slack Web API.
-// It handles authentication headers, rate limiting with retry/backoff,
-// and cursor-based pagination.
+// It handles authentication headers, rate limiting via cli-kit/ratelimit
+// RetryTransport, and cursor-based pagination.
 type Client struct {
 	xoxc       string
 	xoxd       string
 	httpClient *http.Client
 	baseURL    string
-	maxRetries int
 	pageDelay  time.Duration
 
 	// teamURL is cached after the first successful GetTeamURL call.
@@ -44,22 +41,24 @@ type Client struct {
 	// sleepFn is an indirection for testing; defaults to time.Sleep.
 	sleepFn func(time.Duration)
 
-	// OnRateLimit is called when a 429 is received, before sleeping.
-	// Arguments: endpoint, delay, attempt number (0-based).
-	// Callers can set this to surface rate-limit waits in progress output.
-	OnRateLimit func(endpoint string, delay time.Duration, attempt int)
+	// retryTransport is exposed so callers can set OnRetry for progress feedback.
+	retryTransport *ratelimit.RetryTransport
 }
 
 // NewClient creates a Client with the given tokens and optional configuration.
+// Rate-limit retry is handled by wrapping the HTTP transport in a
+// cli-kit/ratelimit.RetryTransport.
 func NewClient(xoxc, xoxd string, opts ...Option) *Client {
+	rt := ratelimit.NewRetryTransport(http.DefaultTransport)
+
 	c := &Client{
-		xoxc:       xoxc,
-		xoxd:       xoxd,
-		httpClient: &http.Client{Timeout: defaultTimeout},
-		baseURL:    config.SlackAPIBase,
-		maxRetries: defaultMaxRetries,
-		pageDelay:  defaultPageDelay,
-		sleepFn:    time.Sleep,
+		xoxc:           xoxc,
+		xoxd:           xoxd,
+		httpClient:     &http.Client{Timeout: defaultTimeout, Transport: rt},
+		baseURL:        config.SlackAPIBase,
+		pageDelay:      defaultPageDelay,
+		sleepFn:        time.Sleep,
+		retryTransport: rt,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -67,84 +66,74 @@ func NewClient(xoxc, xoxd string, opts ...Option) *Client {
 	return c
 }
 
+// SetOnRetry wires a callback that fires before each retry sleep.
+// This lets callers (e.g. progress spinners) react to rate-limit waits.
+func (c *Client) SetOnRetry(fn func(attempt int, delay time.Duration, statusCode int)) {
+	c.retryTransport.OnRetry = fn
+}
+
 // Call makes a single POST request to the given Slack API endpoint.
 // Params with empty values are included; to omit a key, simply don't add it
 // to the map. Returns the parsed JSON body as a generic map.
 func (c *Client) Call(endpoint string, params map[string]string) (map[string]any, error) {
-	return c.callWithRetry(endpoint, params, c.maxRetries)
-}
-
-// callWithRetry performs the HTTP call and retries on 429 up to maxRetries times.
-// It uses a loop instead of recursion to avoid stacking deferred resp.Body.Close() calls.
-func (c *Client) callWithRetry(endpoint string, params map[string]string, retriesLeft int) (map[string]any, error) {
 	reqURL := c.baseURL + "/" + endpoint
 
-	for {
-		body := c.encodeParams(params)
-		req, err := http.NewRequest(http.MethodPost, reqURL, strings.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("creating request for %s: %w", endpoint, err)
-		}
-		req.Header.Set("Authorization", "Bearer "+c.xoxc)
-		req.Header.Set("Cookie", "d="+c.xoxd)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
-		req.Header.Set("User-Agent", config.UserAgent)
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("request to %s failed: %w", endpoint, err)
-		}
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			retryAfter, hasHeader := c.parseRetryAfter(resp.Header.Get("Retry-After"))
-			// Drain and close the body before retrying to avoid stacking deferred closes.
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-
-			if retriesLeft <= 0 {
-				return nil, &RateLimitError{RetryAfter: retryAfter}
-			}
-			attempt := c.maxRetries - retriesLeft
-			delay := c.backoffDelay(retryAfter, hasHeader, attempt)
-			if c.OnRateLimit != nil {
-				c.OnRateLimit(endpoint, delay, attempt)
-			}
-			c.sleepFn(delay)
-			retriesLeft--
-			continue
-		}
-
-		respBody, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("reading response from %s: %w", endpoint, err)
-		}
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, clierrors.HandleHTTPError(resp.StatusCode, endpoint, "slack-cli", c.checkAuth)
-		}
-
-		var result map[string]any
-		if err := json.Unmarshal(respBody, &result); err != nil {
-			return nil, fmt.Errorf("decoding response from %s: %w", endpoint, err)
-		}
-
-		// Slack returns HTTP 200 with {"ok": false, "error": "..."} for
-		// auth failures, permission errors, etc. Detect this and return a CLIError.
-		if ok, exists := result["ok"]; exists {
-			if okBool, isBool := ok.(bool); isBool && !okBool {
-				errMsg := "unknown error"
-				if e, has := result["error"].(string); has {
-					errMsg = e
-				}
-				cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
-				cliErr = cliErr.WithCode(resp.StatusCode)
-				return nil, cliErr
-			}
-		}
-
-		return result, nil
+	body := c.encodeParams(params)
+	req, err := http.NewRequest(http.MethodPost, reqURL, strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating request for %s: %w", endpoint, err)
 	}
+	req.Header.Set("Authorization", "Bearer "+c.xoxc)
+	req.Header.Set("Cookie", "d="+c.xoxd)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
+	req.Header.Set("User-Agent", config.UserAgent)
+
+	debug.Log("HTTP POST %s", reqURL)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request to %s failed: %w", endpoint, err)
+	}
+
+	debug.Log("HTTP %d %s", resp.StatusCode, reqURL)
+
+	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("reading response from %s: %w", endpoint, err)
+	}
+
+	// After the RetryTransport has exhausted retries, a 429 will still
+	// come through here. Surface it as a RateLimitError.
+	if resp.StatusCode == http.StatusTooManyRequests {
+		ra := ratelimit.ParseRetryAfter(resp.Header.Get("Retry-After"))
+		return nil, &RateLimitError{RetryAfter: ra}
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, clierrors.HandleHTTPError(resp.StatusCode, endpoint, "slack-cli", c.checkAuth)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decoding response from %s: %w", endpoint, err)
+	}
+
+	// Slack returns HTTP 200 with {"ok": false, "error": "..."} for
+	// auth failures, permission errors, etc. Detect this and return a CLIError.
+	if ok, exists := result["ok"]; exists {
+		if okBool, isBool := ok.(bool); isBool && !okBool {
+			errMsg := "unknown error"
+			if e, has := result["error"].(string); has {
+				errMsg = e
+			}
+			cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
+			cliErr = cliErr.WithCode(resp.StatusCode)
+			return nil, cliErr
+		}
+	}
+
+	return result, nil
 }
 
 // CallPaginated follows Slack cursor-based pagination. It collects items found
@@ -244,35 +233,6 @@ func (c *Client) encodeParams(params map[string]string) string {
 		vals.Set(k, v)
 	}
 	return vals.Encode()
-}
-
-// parseRetryAfter reads the Retry-After header value as seconds.
-// Returns the parsed duration and true if a valid header was present.
-// Returns (0, false) if the header is missing or unparseable.
-func (c *Client) parseRetryAfter(header string) (time.Duration, bool) {
-	if header == "" {
-		return 0, false
-	}
-	secs, err := strconv.Atoi(header)
-	if err != nil || secs <= 0 {
-		return 0, false
-	}
-	return time.Duration(secs) * time.Second, true
-}
-
-// backoffDelay returns the delay before retrying. If hasRetryAfter is true,
-// retryAfter contains the server-requested delay and we add jitter on top.
-// Otherwise we use exponential backoff with jitter.
-func (c *Client) backoffDelay(retryAfter time.Duration, hasRetryAfter bool, attempt int) time.Duration {
-	if hasRetryAfter {
-		// Add 0-25% jitter on top of the server-requested delay.
-		jitter := time.Duration(rand.Int64N(int64(retryAfter) / 4))
-		return retryAfter + jitter
-	}
-	// Exponential backoff: 1s, 2s, 4s, 8s, ...
-	base := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-	jitter := time.Duration(rand.Int64N(int64(base) / 2))
-	return base + jitter
 }
 
 // ExtractItems pulls a slice of objects from result[collectKey].

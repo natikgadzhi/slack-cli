@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	cliauth "github.com/natikgadzhi/cli-kit/auth"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
@@ -28,18 +29,18 @@ var authCheckCmd = &cobra.Command{
 
 var authSetXoxcCmd = &cobra.Command{
 	Use:     "set-xoxc <token>",
-	Short:   "Store xoxc token in the macOS Keychain",
+	Short:   "Store xoxc token in the OS keychain",
 	Args:    cobra.ExactArgs(1),
 	Example: "  slack-cli auth set-xoxc xoxc-...",
-	RunE:    storeToken("xoxc token", config.KeychainXoxcService),
+	RunE:    storeXoxcToken,
 }
 
 var authSetXoxdCmd = &cobra.Command{
 	Use:     "set-xoxd <token>",
-	Short:   "Store xoxd cookie in the macOS Keychain",
+	Short:   "Store xoxd cookie in the OS keychain",
 	Args:    cobra.ExactArgs(1),
 	Example: "  slack-cli auth set-xoxd xoxd-...",
-	RunE:    storeToken("xoxd cookie", config.KeychainXoxdService),
+	RunE:    storeXoxdToken,
 }
 
 func init() {
@@ -111,6 +112,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 }
 
 // checkToken prints diagnostics about a single token to the given writer.
+// Token values are masked using cli-kit/auth.MaskToken.
 func checkToken(w io.Writer, name, token, expectedPrefix string) {
 	clean, warnings := auth.SanitizeToken(token)
 
@@ -118,12 +120,9 @@ func checkToken(w io.Writer, name, token, expectedPrefix string) {
 		_, _ = fmt.Fprintf(w, "[WARN] %s: %s\n", name, warn)
 	}
 
-	// Show first 20 chars and length.
-	preview := clean
-	if len(preview) > 20 {
-		preview = preview[:20]
-	}
-	_, _ = fmt.Fprintf(w, "[INFO] %s: %s... (length %d)\n", name, preview, len(clean))
+	// Show masked token preview using cli-kit/auth.MaskToken.
+	masked := cliauth.MaskToken(clean)
+	_, _ = fmt.Fprintf(w, "[INFO] %s: %s (length %d)\n", name, masked, len(clean))
 
 	// Check expected prefix.
 	if !strings.HasPrefix(clean, expectedPrefix) {
@@ -133,19 +132,30 @@ func checkToken(w io.Writer, name, token, expectedPrefix string) {
 	}
 }
 
-// storeToken returns a RunE handler that sanitizes and stores a token in the Keychain.
-func storeToken(label string, serviceFn func() string) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		token, warnings := auth.SanitizeToken(args[0])
-		for _, warn := range warnings {
-			fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
-		}
-		service := serviceFn()
-		if err := auth.KeychainSet(service, token); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Stored %s in keychain (service=%q, account=%q)\n",
-			label, service, config.KeychainAccount())
-		return nil
+// storeXoxcToken sanitizes and stores the xoxc token in the OS keychain.
+func storeXoxcToken(cmd *cobra.Command, args []string) error {
+	token, warnings := auth.SanitizeToken(args[0])
+	for _, warn := range warnings {
+		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
 	}
+	if err := auth.StoreXoxc(token); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Stored xoxc token in keychain (service=%q, account=%q)\n",
+		config.KeychainXoxcService(), config.KeychainAccount())
+	return nil
+}
+
+// storeXoxdToken sanitizes and stores the xoxd cookie in the OS keychain.
+func storeXoxdToken(cmd *cobra.Command, args []string) error {
+	token, warnings := auth.SanitizeToken(args[0])
+	for _, warn := range warnings {
+		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
+	}
+	if err := auth.StoreXoxd(token); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Stored xoxd cookie in keychain (service=%q, account=%q)\n",
+		config.KeychainXoxdService(), config.KeychainAccount())
+	return nil
 }

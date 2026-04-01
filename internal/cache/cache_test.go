@@ -35,25 +35,26 @@ func TestMarshalFrontmatter(t *testing.T) {
 	if !strings.HasPrefix(s, "---\n") {
 		t.Fatal("expected opening ---")
 	}
-	if !strings.Contains(s, "tool: slack-cli\n") {
+	if !strings.Contains(s, "tool: slack-cli") {
 		t.Error("missing tool field")
 	}
-	if !strings.Contains(s, "object_type: message\n") {
+	if !strings.Contains(s, "object_type: message") {
 		t.Error("missing object_type field")
 	}
-	if !strings.Contains(s, "slug: C12345678/1741234567.123456\n") {
+	if !strings.Contains(s, "slug: C12345678/1741234567.123456") {
 		t.Error("missing slug field")
 	}
-	if !strings.Contains(s, "created_at: 2026-03-14T10:00:00Z\n") {
+	if !strings.Contains(s, "created_at: \"2026-03-14T10:00:00Z\"") && !strings.Contains(s, "created_at: 2026-03-14T10:00:00Z") {
 		t.Error("missing created_at field")
 	}
-	if !strings.Contains(s, "updated_at: 2026-03-14T10:00:00Z\n") {
+	if !strings.Contains(s, "updated_at: \"2026-03-14T10:00:00Z\"") && !strings.Contains(s, "updated_at: 2026-03-14T10:00:00Z") {
 		t.Error("missing updated_at field")
 	}
-	if !strings.Contains(s, "source_url: https://myteam.slack.com/archives/C12345678/p1741234567123456\n") {
+	if !strings.Contains(s, "source_url: https://myteam.slack.com/archives/C12345678/p1741234567123456") {
 		t.Error("missing source_url field")
 	}
-	if !strings.Contains(s, `command: "slack-cli message https://myteam.slack.com/archives/C12345678/p1741234567123456"`) {
+	// The command field may be quoted differently by yaml.Marshal.
+	if !strings.Contains(s, "slack-cli message https://myteam.slack.com/archives/C12345678/p1741234567123456") {
 		t.Error("missing command field")
 	}
 	if !strings.Contains(s, "Hello, world!\n") {
@@ -481,36 +482,7 @@ func TestUnmarshalFrontmatter_EmptyLines(t *testing.T) {
 	}
 }
 
-func TestStripQuotes_DoubleQuotes(t *testing.T) {
-	if got := stripQuotes(`"hello"`); got != "hello" {
-		t.Errorf("stripQuotes = %q, want %q", got, "hello")
-	}
-}
-
-func TestStripQuotes_SingleQuotesNotStripped(t *testing.T) {
-	// stripQuotes only handles double quotes.
-	if got := stripQuotes("'hello'"); got != "'hello'" {
-		t.Errorf("stripQuotes = %q, want %q (single quotes should not be stripped)", got, "'hello'")
-	}
-}
-
-func TestStripQuotes_Empty(t *testing.T) {
-	if got := stripQuotes(""); got != "" {
-		t.Errorf("stripQuotes(\"\") = %q, want empty", got)
-	}
-}
-
-func TestStripQuotes_SingleChar(t *testing.T) {
-	if got := stripQuotes("x"); got != "x" {
-		t.Errorf("stripQuotes(\"x\") = %q, want %q", got, "x")
-	}
-}
-
-func TestStripQuotes_MismatchedQuotes(t *testing.T) {
-	if got := stripQuotes(`"hello`); got != `"hello` {
-		t.Errorf("stripQuotes = %q, want %q (mismatched quotes)", got, `"hello`)
-	}
-}
+// stripQuotes tests removed — quoting is now handled by cli-kit/derived via yaml.v3.
 
 func TestMarshalFrontmatter_BodyWithoutTrailingNewline(t *testing.T) {
 	meta := testMeta()

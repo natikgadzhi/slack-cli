@@ -38,10 +38,10 @@ func ResolveChannel(client *api.Client, nameOrID string, progress io.Writer, ver
 	}
 
 	if progress != nil {
-		client.OnRateLimit = func(endpoint string, delay time.Duration, attempt int) {
+		client.SetOnRetry(func(attempt int, delay time.Duration, statusCode int) {
 			_, _ = fmt.Fprintf(progress, "\r  [rate limited] waiting %s (retry %d)...", delay.Round(time.Millisecond), attempt+1)
-		}
-		defer func() { client.OnRateLimit = nil }()
+		})
+		defer func() { client.SetOnRetry(nil) }()
 	}
 
 	// First pass: active channels only.

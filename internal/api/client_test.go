@@ -13,10 +13,12 @@ import (
 	"time"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
+	"github.com/natikgadzhi/cli-kit/ratelimit"
 )
 
 // newTestClient creates a Client pointing at the given test server URL
-// with zero-duration page delays and an injected no-op sleep.
+// with zero-duration page delays. The RetryTransport uses a minimal base
+// delay so exponential backoff is effectively instant in tests.
 func newTestClient(serverURL string, opts ...Option) *Client {
 	allOpts := []Option{
 		WithBaseURL(serverURL),
@@ -25,7 +27,10 @@ func newTestClient(serverURL string, opts ...Option) *Client {
 	}
 	allOpts = append(allOpts, opts...)
 	c := NewClient("xoxc-test-token", "xoxd-test-cookie", allOpts...)
-	c.sleepFn = func(time.Duration) {} // don't actually sleep in tests
+	c.sleepFn = func(time.Duration) {} // don't actually sleep in pagination
+	// Use a tiny base delay so retry backoff is effectively instant in tests.
+	c.retryTransport.BaseDelay = 1 * time.Millisecond
+	c.retryTransport.MaxDelay = 10 * time.Millisecond
 	return c
 }
 
@@ -165,7 +170,10 @@ func TestCall_NonOKHTTPReturnsCLIError(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// Disable 5xx retries for this test so we get the error immediately.
 	client := newTestClient(srv.URL)
+	client.retryTransport.RetryOn5xx = false
+
 	_, err := client.Call("auth.test", nil)
 	if err == nil {
 		t.Fatal("expected error for HTTP 500")
@@ -331,29 +339,6 @@ func TestGetTeamURL_Cached(t *testing.T) {
 	}
 }
 
-func TestBackoffDelay_WithRetryAfter(t *testing.T) {
-	c := NewClient("x", "x")
-	d := c.backoffDelay(5*time.Second, true, 0)
-	// Should be between 5s and 5s + 25% jitter = 6.25s.
-	if d < 5*time.Second || d > 6250*time.Millisecond {
-		t.Errorf("backoff delay = %v, expected [5s, 6.25s]", d)
-	}
-}
-
-func TestBackoffDelay_Exponential(t *testing.T) {
-	c := NewClient("x", "x")
-	// attempt=0 → base=1s, jitter up to 0.5s → [1s, 1.5s]
-	d := c.backoffDelay(0, false, 0)
-	if d < 0 || d > 2*time.Second {
-		t.Errorf("exponential backoff attempt 0 = %v, expected [0, 2s]", d)
-	}
-	// attempt=3 → base=8s, jitter up to 4s → [8s, 12s]
-	d = c.backoffDelay(0, false, 3)
-	if d < 8*time.Second || d > 12*time.Second {
-		t.Errorf("exponential backoff attempt 3 = %v, expected [8s, 12s]", d)
-	}
-}
-
 func TestCall_OkFalseReturnsCLIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -406,15 +391,13 @@ func TestCall_OkFalseUnknownError(t *testing.T) {
 	}
 }
 
-func TestCall_429WithoutRetryAfterUsesExponentialBackoff(t *testing.T) {
+func TestCall_429WithoutRetryAfterUsesBackoff(t *testing.T) {
 	var attempts atomic.Int32
-	var delays []time.Duration
-	var mu sync.Mutex
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := attempts.Add(1)
 		if n <= 2 {
-			// No Retry-After header — should trigger exponential backoff.
+			// No Retry-After header — the transport uses exponential backoff.
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
@@ -424,11 +407,6 @@ func TestCall_429WithoutRetryAfterUsesExponentialBackoff(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	client.sleepFn = func(d time.Duration) {
-		mu.Lock()
-		delays = append(delays, d)
-		mu.Unlock()
-	}
 
 	result, err := client.Call("conversations.list", nil)
 	if err != nil {
@@ -439,22 +417,6 @@ func TestCall_429WithoutRetryAfterUsesExponentialBackoff(t *testing.T) {
 	}
 	if attempts.Load() != 3 {
 		t.Errorf("expected 3 attempts, got %d", attempts.Load())
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	// With no Retry-After header, exponential backoff should be used.
-	// attempt 0: base=1s, attempt 1: base=2s.
-	if len(delays) != 2 {
-		t.Fatalf("expected 2 delays, got %d", len(delays))
-	}
-	// First delay (attempt 0): exponential base=1s + jitter up to 0.5s → [1s, 1.5s]
-	if delays[0] < 1*time.Second || delays[0] > 2*time.Second {
-		t.Errorf("first delay = %v, expected [1s, 2s]", delays[0])
-	}
-	// Second delay (attempt 1): exponential base=2s + jitter up to 1s → [2s, 3s]
-	if delays[1] < 2*time.Second || delays[1] > 3*time.Second {
-		t.Errorf("second delay = %v, expected [2s, 3s]", delays[1])
 	}
 }
 
@@ -505,7 +467,10 @@ func TestCall_NonOKHTTPReturnsCLIErrorWithCode(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// Disable 5xx retry for this test.
 	client := newTestClient(srv.URL)
+	client.retryTransport.RetryOn5xx = false
+
 	_, err := client.Call("auth.test", nil)
 	if err == nil {
 		t.Fatal("expected error for HTTP 502")
@@ -604,44 +569,6 @@ func TestGetTeamURL_CachedConcurrent(t *testing.T) {
 
 	if calls.Load() != 1 {
 		t.Errorf("expected exactly 1 API call (sync.Once), got %d", calls.Load())
-	}
-}
-
-func TestParseRetryAfter_ZeroValue(t *testing.T) {
-	c := NewClient("x", "x")
-	d, ok := c.parseRetryAfter("0")
-	if ok {
-		t.Error("parseRetryAfter(\"0\") should return false")
-	}
-	if d != 0 {
-		t.Errorf("expected 0 duration, got %v", d)
-	}
-}
-
-func TestParseRetryAfter_NegativeValue(t *testing.T) {
-	c := NewClient("x", "x")
-	_, ok := c.parseRetryAfter("-5")
-	if ok {
-		t.Error("parseRetryAfter(\"-5\") should return false")
-	}
-}
-
-func TestParseRetryAfter_NonNumeric(t *testing.T) {
-	c := NewClient("x", "x")
-	_, ok := c.parseRetryAfter("abc")
-	if ok {
-		t.Error("parseRetryAfter(\"abc\") should return false")
-	}
-}
-
-func TestParseRetryAfter_ValidValue(t *testing.T) {
-	c := NewClient("x", "x")
-	d, ok := c.parseRetryAfter("3")
-	if !ok {
-		t.Error("parseRetryAfter(\"3\") should return true")
-	}
-	if d != 3*time.Second {
-		t.Errorf("expected 3s, got %v", d)
 	}
 }
 
@@ -758,8 +685,8 @@ func TestNewClient_Defaults(t *testing.T) {
 	if c.xoxd != "xoxd-cookie" {
 		t.Errorf("xoxd = %q", c.xoxd)
 	}
-	if c.maxRetries != defaultMaxRetries {
-		t.Errorf("maxRetries = %d, want %d", c.maxRetries, defaultMaxRetries)
+	if c.retryTransport.MaxRetries != ratelimit.DefaultMaxRetries {
+		t.Errorf("maxRetries = %d, want %d", c.retryTransport.MaxRetries, ratelimit.DefaultMaxRetries)
 	}
 	if c.pageDelay != defaultPageDelay {
 		t.Errorf("pageDelay = %v, want %v", c.pageDelay, defaultPageDelay)
@@ -768,8 +695,8 @@ func TestNewClient_Defaults(t *testing.T) {
 
 func TestNewClient_WithOptions(t *testing.T) {
 	c := NewClient("x", "x", WithMaxRetries(10), WithPageDelay(500*time.Millisecond))
-	if c.maxRetries != 10 {
-		t.Errorf("maxRetries = %d, want 10", c.maxRetries)
+	if c.retryTransport.MaxRetries != 10 {
+		t.Errorf("maxRetries = %d, want 10", c.retryTransport.MaxRetries)
 	}
 	if c.pageDelay != 500*time.Millisecond {
 		t.Errorf("pageDelay = %v, want 500ms", c.pageDelay)

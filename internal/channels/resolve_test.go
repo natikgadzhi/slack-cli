@@ -17,13 +17,15 @@ import (
 )
 
 // newTestClient creates an api.Client pointing at the given test server URL
-// with zero-duration page delays and short timeout.
+// with zero-duration page delays, short timeout, minimal retries, and no 5xx retries.
 func newTestClient(serverURL string) *api.Client {
 	c := api.NewClient(
 		"xoxc-test-token", "xoxd-test-cookie",
 		api.WithBaseURL(serverURL),
 		api.WithPageDelay(0),
 		api.WithTimeout(5*time.Second),
+		api.WithMaxRetries(1),
+		api.WithRetryOn5xx(false),
 	)
 	return c
 }
@@ -296,19 +298,20 @@ func TestResolveChannel_RateLimitPartialResults_NotFound(t *testing.T) {
 			json.NewEncoder(w).Encode(resp)
 		default:
 			// Return 429 on subsequent pages.
-			w.Header().Set("Retry-After", "30")
+			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)
 		}
 	}))
 	defer srv.Close()
 
-	// Zero retries so the client gives up immediately on 429.
+	// Minimal retries so the client gives up quickly on 429.
 	client := api.NewClient(
 		"xoxc-test-token", "xoxd-test-cookie",
 		api.WithBaseURL(srv.URL),
 		api.WithPageDelay(0),
 		api.WithTimeout(5*time.Second),
-		api.WithMaxRetries(0),
+		api.WithMaxRetries(1),
+		api.WithRetryOn5xx(false),
 	)
 	_, err := ResolveChannel(client, "deployments", nil, false)
 	if err == nil {
@@ -358,7 +361,8 @@ func TestResolveChannel_RateLimitPartialResults_Found(t *testing.T) {
 		api.WithBaseURL(srv.URL),
 		api.WithPageDelay(0),
 		api.WithTimeout(5*time.Second),
-		api.WithMaxRetries(0),
+		api.WithMaxRetries(1),
+		api.WithRetryOn5xx(false),
 	)
 	id, err := ResolveChannel(client, "deployments", nil, false)
 	if err != nil {

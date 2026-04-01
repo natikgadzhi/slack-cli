@@ -2,15 +2,16 @@
 // Each cached object is stored as a Markdown file with structured metadata
 // in the YAML frontmatter block.
 //
-// The base frontmatter schema (tool, object_type, slug, timestamps) follows
-// the cli-kit/derived.Frontmatter convention. This package extends it with
-// Slack-specific fields (channel, channel_id, user, thread_ts).
+// Frontmatter is rendered and parsed via cli-kit/derived.Render and
+// derived.Parse. Slack-specific fields (channel, channel_id, user, thread_ts)
+// are stored as extra keys in the generic map[string]any metadata.
 package cache
 
 import (
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/natikgadzhi/cli-kit/derived"
 )
 
 // Metadata holds the structured fields stored in YAML frontmatter.
@@ -30,154 +31,147 @@ type Metadata struct {
 	ThreadTS  string // thread parent timestamp
 }
 
-// frontmatterSeparator is the YAML frontmatter delimiter.
-const frontmatterSeparator = "---"
-
 // MarshalFrontmatter encodes metadata and a Markdown body into a single
-// byte slice with YAML frontmatter. The schema is small and fixed, so we
-// use fmt.Fprintf rather than pulling in a YAML library.
+// byte slice with YAML frontmatter via cli-kit/derived.Render.
 func MarshalFrontmatter(meta Metadata, body []byte) []byte {
-	var b strings.Builder
-
-	b.WriteString(frontmatterSeparator)
-	b.WriteByte('\n')
-	fmt.Fprintf(&b, "tool: %s\n", meta.Tool)
-	fmt.Fprintf(&b, "object_type: %s\n", meta.ObjectType)
-	fmt.Fprintf(&b, "slug: %s\n", meta.Slug)
-	fmt.Fprintf(&b, "created_at: %s\n", meta.CreatedAt.UTC().Format(time.RFC3339))
-	fmt.Fprintf(&b, "updated_at: %s\n", meta.UpdatedAt.UTC().Format(time.RFC3339))
-	if meta.SourceURL != "" {
-		fmt.Fprintf(&b, "source_url: %s\n", meta.SourceURL)
+	m := metadataToMap(meta)
+	result := derived.Render(m, body)
+	// Ensure trailing newline.
+	if len(result) > 0 && result[len(result)-1] != '\n' {
+		result = append(result, '\n')
 	}
-	if meta.Command != "" {
-		fmt.Fprintf(&b, "command: \"%s\"\n", meta.Command)
-	}
-	if meta.Channel != "" {
-		fmt.Fprintf(&b, "channel: %s\n", meta.Channel)
-	}
-	if meta.ChannelID != "" {
-		fmt.Fprintf(&b, "channel_id: %s\n", meta.ChannelID)
-	}
-	if meta.User != "" {
-		fmt.Fprintf(&b, "user: %s\n", meta.User)
-	}
-	if meta.ThreadTS != "" {
-		fmt.Fprintf(&b, "thread_ts: %s\n", meta.ThreadTS)
-	}
-	b.WriteString(frontmatterSeparator)
-	b.WriteByte('\n')
-
-	if len(body) > 0 {
-		b.Write(body)
-		// Ensure trailing newline.
-		if body[len(body)-1] != '\n' {
-			b.WriteByte('\n')
-		}
-	}
-
-	return []byte(b.String())
+	return result
 }
 
 // UnmarshalFrontmatter splits a Markdown file with YAML frontmatter into
-// its Metadata and body. Returns an error if the frontmatter block is
-// missing or malformed.
+// its Metadata and body via cli-kit/derived.Parse. Returns an error if the
+// frontmatter block is missing or malformed.
 func UnmarshalFrontmatter(data []byte) (Metadata, []byte, error) {
-	s := string(data)
-
-	// Must start with "---\n".
-	if !strings.HasPrefix(s, frontmatterSeparator+"\n") {
-		return Metadata{}, nil, fmt.Errorf("missing opening frontmatter separator")
-	}
-
-	// Find the closing "---".
-	rest := s[len(frontmatterSeparator)+1:]
-	idx := strings.Index(rest, frontmatterSeparator+"\n")
-	if idx < 0 {
-		// Also accept "---" at EOF (no trailing newline after closing).
-		if strings.HasSuffix(rest, frontmatterSeparator) {
-			idx = len(rest) - len(frontmatterSeparator)
-		} else {
-			return Metadata{}, nil, fmt.Errorf("missing closing frontmatter separator")
-		}
-	}
-
-	fmBlock := rest[:idx]
-
-	// When the closing "---" is at the very end of the string (no trailing
-	// newline), the body is empty. Guard against an out-of-bounds slice.
-	var body []byte
-	if afterClose := idx + len(frontmatterSeparator) + 1; afterClose <= len(rest) {
-		body = []byte(rest[afterClose:])
-	}
-
-	meta, err := parseFrontmatter(fmBlock)
+	rawMeta, body, err := derived.Parse(data)
 	if err != nil {
 		return Metadata{}, nil, fmt.Errorf("parsing frontmatter: %w", err)
 	}
-
+	if rawMeta == nil {
+		return Metadata{}, nil, fmt.Errorf("missing opening frontmatter separator")
+	}
+	meta, err := mapToMetadata(rawMeta)
+	if err != nil {
+		return Metadata{}, nil, fmt.Errorf("parsing frontmatter: %w", err)
+	}
 	return meta, body, nil
 }
 
-// parseFrontmatter parses the key-value pairs between the --- delimiters.
-func parseFrontmatter(block string) (Metadata, error) {
+// metadataToMap converts a Metadata struct to a map[string]any for
+// cli-kit/derived.Render. Empty optional fields are omitted.
+func metadataToMap(meta Metadata) map[string]any {
+	m := map[string]any{}
+
+	if meta.Tool != "" {
+		m["tool"] = meta.Tool
+	}
+	if meta.ObjectType != "" {
+		m["object_type"] = meta.ObjectType
+	}
+	if meta.Slug != "" {
+		m["slug"] = meta.Slug
+	}
+	if !meta.CreatedAt.IsZero() {
+		m["created_at"] = meta.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if !meta.UpdatedAt.IsZero() {
+		m["updated_at"] = meta.UpdatedAt.UTC().Format(time.RFC3339)
+	}
+	if meta.SourceURL != "" {
+		m["source_url"] = meta.SourceURL
+	}
+	if meta.Command != "" {
+		m["command"] = meta.Command
+	}
+	if meta.Channel != "" {
+		m["channel"] = meta.Channel
+	}
+	if meta.ChannelID != "" {
+		m["channel_id"] = meta.ChannelID
+	}
+	if meta.User != "" {
+		m["user"] = meta.User
+	}
+	if meta.ThreadTS != "" {
+		m["thread_ts"] = meta.ThreadTS
+	}
+
+	return m
+}
+
+// mapToMetadata converts a map[string]any from derived.Parse back into
+// a Metadata struct. Unknown keys are silently ignored.
+func mapToMetadata(m map[string]any) (Metadata, error) {
 	var meta Metadata
 
-	for _, line := range strings.Split(block, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		key, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		// Strip surrounding quotes if present.
-		value = stripQuotes(value)
-
-		switch key {
-		case "tool":
-			meta.Tool = value
-		case "object_type":
-			meta.ObjectType = value
-		case "slug":
-			meta.Slug = value
-		case "created_at":
-			t, err := time.Parse(time.RFC3339, value)
-			if err != nil {
-				return Metadata{}, fmt.Errorf("invalid created_at %q: %w", value, err)
-			}
-			meta.CreatedAt = t
-		case "updated_at":
-			t, err := time.Parse(time.RFC3339, value)
-			if err != nil {
-				return Metadata{}, fmt.Errorf("invalid updated_at %q: %w", value, err)
-			}
-			meta.UpdatedAt = t
-		case "source_url":
-			meta.SourceURL = value
-		case "command":
-			meta.Command = value
-		case "channel":
-			meta.Channel = value
-		case "channel_id":
-			meta.ChannelID = value
-		case "user":
-			meta.User = value
-		case "thread_ts":
-			meta.ThreadTS = value
-		}
+	if v, ok := m["tool"].(string); ok {
+		meta.Tool = v
+	}
+	if v, ok := m["object_type"].(string); ok {
+		meta.ObjectType = v
+	}
+	if v, ok := m["slug"].(string); ok {
+		meta.Slug = v
+	}
+	if v, err := parseTimeField(m, "created_at"); err != nil {
+		return Metadata{}, err
+	} else if !v.IsZero() {
+		meta.CreatedAt = v
+	}
+	if v, err := parseTimeField(m, "updated_at"); err != nil {
+		return Metadata{}, err
+	} else if !v.IsZero() {
+		meta.UpdatedAt = v
+	}
+	if v, ok := m["source_url"].(string); ok {
+		meta.SourceURL = v
+	}
+	if v, ok := m["command"].(string); ok {
+		meta.Command = v
+	}
+	if v, ok := m["channel"].(string); ok {
+		meta.Channel = v
+	}
+	if v, ok := m["channel_id"].(string); ok {
+		meta.ChannelID = v
+	}
+	if v, ok := m["user"].(string); ok {
+		meta.User = v
+	}
+	if v, ok := m["thread_ts"].(string); ok {
+		meta.ThreadTS = v
+	} else if f, ok := m["thread_ts"].(float64); ok {
+		// yaml.v3 parses numeric-looking values as float64.
+		meta.ThreadTS = fmt.Sprintf("%.6f", f)
+	} else if i, ok := m["thread_ts"].(int); ok {
+		meta.ThreadTS = fmt.Sprintf("%d.000000", i)
 	}
 
 	return meta, nil
 }
 
-// stripQuotes removes a matching pair of double quotes from a string.
-func stripQuotes(s string) string {
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		return s[1 : len(s)-1]
+// parseTimeField extracts a time.Time from the map. yaml.v3 may have
+// already parsed it as time.Time, or it may be a string that needs
+// manual parsing.
+func parseTimeField(m map[string]any, key string) (time.Time, error) {
+	raw, ok := m[key]
+	if !ok {
+		return time.Time{}, nil
 	}
-	return s
+	switch v := raw.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid %s %q: %w", key, v, err)
+		}
+		return t, nil
+	default:
+		return time.Time{}, fmt.Errorf("invalid %s: unexpected type %T", key, raw)
+	}
 }
