@@ -37,7 +37,7 @@ func FormatMessage(raw map[string]any) Message {
 		msg.TS = ts
 		if f, err := strconv.ParseFloat(ts, 64); err == nil {
 			t := time.Unix(int64(f), 0).UTC()
-			msg.Time = t.Format("2006-01-02 15:04 UTC")
+			msg.Time = t.Format("02 Jan 2006 15:04")
 		}
 	}
 

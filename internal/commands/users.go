@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
+	"github.com/natikgadzhi/slack-cli/internal/table"
 )
 
 var usersCmd = &cobra.Command{
@@ -196,7 +197,7 @@ func getString(m map[string]any, key string) string {
 
 // renderUsersTable renders users as a table to stdout.
 func renderUsersTable(users []map[string]any) {
-	t := output.NewTable()
+	t := table.New()
 	t.Header("ID", "NAME", "REAL NAME", "EMAIL")
 	for _, u := range users {
 		t.Row(getString(u, "id"), getString(u, "name"), getString(u, "real_name"), getString(u, "email"))

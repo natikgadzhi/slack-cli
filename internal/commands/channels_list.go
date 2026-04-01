@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
+	"github.com/natikgadzhi/slack-cli/internal/table"
 )
 
 // channelsListCmd lists channels and conversations the user has access to.
@@ -196,7 +197,7 @@ func deriveChannelType(ch map[string]any) string {
 
 // renderChannelsTable renders channels as a table to stdout.
 func renderChannelsTable(channels []map[string]any) {
-	t := output.NewTable()
+	t := table.New()
 	t.Header("ID", "NAME", "TYPE", "MEMBERS", "TOPIC")
 	for _, ch := range channels {
 		id, _ := ch["id"].(string)

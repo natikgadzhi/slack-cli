@@ -243,5 +243,5 @@ func FormatTS(ts string) string {
 		return ts
 	}
 	t := time.Unix(int64(f), 0).UTC()
-	return t.Format("2006-01-02 15:04 UTC")
+	return t.Format("02 Jan 2006 15:04")
 }
