@@ -15,6 +15,7 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
+	"github.com/natikgadzhi/slack-cli/internal/table"
 )
 
 // channelsCmd is the parent command for channel-related subcommands.
@@ -237,7 +238,7 @@ func runChannel(cmd *cobra.Command, args []string) error {
 
 // renderMessagesTable renders messages as a table to stdout.
 func renderMessagesTable(messages []formatting.Message) {
-	t := output.NewTable()
+	t := table.New()
 	t.Header("TIME", "USER", "TEXT", "LINK")
 	for _, msg := range messages {
 		text := truncate(msg.Text, 80)

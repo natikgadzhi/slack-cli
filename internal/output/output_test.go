@@ -476,7 +476,7 @@ func TestRenderSearchResults_Markdown(t *testing.T) {
 	if strings.Contains(out, "1741234567.000000") {
 		t.Errorf("search results should show formatted time, not raw ts:\n%s", out)
 	}
-	if !strings.Contains(out, "2025-03-06") {
+	if !strings.Contains(out, "06 Mar 2025") {
 		t.Errorf("search results should show formatted date:\n%s", out)
 	}
 }
@@ -629,7 +629,7 @@ func TestFormatTS_Valid(t *testing.T) {
 	if got == "" || got == "1741234567.000000" {
 		t.Errorf("FormatTS should convert to human-readable, got %q", got)
 	}
-	if !strings.Contains(got, "2025-03-06") {
+	if !strings.Contains(got, "06 Mar 2025") {
 		t.Errorf("FormatTS should contain date, got %q", got)
 	}
 }
