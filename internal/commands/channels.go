@@ -15,7 +15,7 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
-	"github.com/natikgadzhi/slack-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 )
 
 // channelsCmd is the parent command for channel-related subcommands.

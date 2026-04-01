@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
-	"github.com/natikgadzhi/slack-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 )
 
 var usersCmd = &cobra.Command{
