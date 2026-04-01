@@ -16,7 +16,7 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
-	"github.com/natikgadzhi/slack-cli/internal/table"
+	"github.com/natikgadzhi/cli-kit/table"
 )
 
 var searchCmd = &cobra.Command{
