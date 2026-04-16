@@ -314,3 +314,53 @@ func writeSearchItemFiles(derivedDir string, results []map[string]any, query str
 
 	return nil
 }
+
+// writeSavedItemFiles writes each saved message as its own markdown file
+// under <derivedDir>/slack/saved/<channel>/<ts>.md.
+func writeSavedItemFiles(derivedDir string, results []map[string]any) error {
+	absDir, err := validateDerivedDir(derivedDir)
+	if err != nil {
+		return err
+	}
+
+	slackDir := filepath.Join(absDir, "slack")
+	c, err := cache.NewCacheWithDir(slackDir)
+	if err != nil {
+		return fmt.Errorf("derived: create directory: %w", err)
+	}
+
+	for _, r := range results {
+		ts, _ := r["ts"].(string)
+		ts = sanitizeTS(ts)
+		if ts == "" {
+			continue
+		}
+
+		var buf bytes.Buffer
+		if err := output.RenderSearchResults(&buf, []map[string]any{r}, output.Markdown); err != nil {
+			return fmt.Errorf("derived: render saved message %s: %w", ts, err)
+		}
+
+		channel, _ := r["channel"].(string)
+		if channel == "" {
+			channel = "unknown-channel"
+		}
+		slug := filepath.Join(channel, ts)
+		user, _ := r["user"].(string)
+		permalink, _ := r["permalink"].(string)
+
+		meta := cache.Metadata{
+			ObjectType: "saved",
+			Slug:       slug,
+			SourceURL:  permalink,
+			Channel:    channel,
+			User:       user,
+		}
+
+		if err := c.PutItem("saved", slug, buf.Bytes(), meta); err != nil {
+			return fmt.Errorf("derived: write saved message %s: %w", ts, err)
+		}
+	}
+
+	return nil
+}

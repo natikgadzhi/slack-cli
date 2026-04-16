@@ -35,6 +35,7 @@ var rootCmd = &cobra.Command{
   slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
   slack-cli channels get general --since 2d --limit 100
   slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
+  slack-cli saved --limit 20
   slack-cli search "deployment failed" --limit 10
   slack-cli search "from:@alice" -o json | jq '.[] | .text'
   slack-cli users --limit 50`,

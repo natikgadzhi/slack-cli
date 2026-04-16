@@ -120,7 +120,7 @@ func TestHelp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--help failed: %v", err)
 	}
-	for _, cmd := range []string{"auth", "message", "channels", "search"} {
+	for _, cmd := range []string{"auth", "message", "channels", "saved", "search"} {
 		if !strings.Contains(stdout, cmd) {
 			t.Errorf("--help missing %q command", cmd)
 		}

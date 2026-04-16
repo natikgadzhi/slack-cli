@@ -69,6 +69,7 @@ slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels search eng
+slack-cli saved --limit 20
 slack-cli search "deployment failed" --limit 10
 slack-cli users
 ```
@@ -186,6 +187,22 @@ slack-cli search --from U12345 --sort recent
 | `--sort` | `relevance` | Sort order: `relevance` or `recent` |
 
 At least one of a query argument or `--from` is required.
+
+### `saved`
+
+List saved messages via Slack's legacy stars API.
+
+```sh
+slack-cli saved
+slack-cli saved --limit 20
+slack-cli saved -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `20` | Maximum number of saved messages to return |
+
+Slack's newer Later view is not available through Slack's public APIs, so `saved` may not include items you've saved recently in the Slack client.
 
 ### `users`
 
