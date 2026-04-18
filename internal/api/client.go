@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultTimeout  = 30 * time.Second
+	defaultTimeout   = 30 * time.Second
 	defaultPageDelay = 100 * time.Millisecond
 )
 

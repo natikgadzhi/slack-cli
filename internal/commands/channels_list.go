@@ -10,8 +10,8 @@ import (
 	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/spf13/cobra"
 
-	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/cli-kit/table"
+	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 
 // channelsListCmd lists channels and conversations the user has access to.
