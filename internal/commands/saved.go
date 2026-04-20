@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -21,18 +22,25 @@ var savedCmd = &cobra.Command{
 
 func init() {
 	savedCmd.Flags().String("endpoint", "saved.list", "Slack API method to hit")
+	savedCmd.Flags().IntP("limit", "n", 0, "Max items (0 = server default)")
 	rootCmd.AddCommand(savedCmd)
 }
 
 func runSaved(cmd *cobra.Command, _ []string) error {
 	endpoint, _ := cmd.Flags().GetString("endpoint")
+	limit, _ := cmd.Flags().GetInt("limit")
 
 	client, err := setupClientOnly()
 	if err != nil {
 		return err
 	}
 
-	result, err := client.Call(endpoint, nil)
+	var params map[string]string
+	if limit > 0 {
+		params = map[string]string{"count": strconv.Itoa(limit)}
+	}
+
+	result, err := client.Call(endpoint, params)
 	if err != nil {
 		return fmt.Errorf("call %s: %w", endpoint, err)
 	}
