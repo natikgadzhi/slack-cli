@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "user": "U01BOB0000",
+      "text": "group reminder",
+      "ts": "1776400000.000001"
+    }
+  ],
+  "has_more": false
+}

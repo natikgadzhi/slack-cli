@@ -37,6 +37,28 @@ func NewUserResolver(client *api.Client) (*UserResolver, error) {
 	}, nil
 }
 
+// DisplayName returns the display name for a single user ID, consulting the
+// on-disk cache and falling back to a users.info lookup. The raw UID is
+// returned on any error or if the user is not found.
+func (r *UserResolver) DisplayName(uid string) string {
+	if uid == "" {
+		return ""
+	}
+	cache, err := r.loadCache()
+	if err != nil {
+		return r.fetchDisplayName(uid)
+	}
+	if name, ok := cache[uid]; ok {
+		return name
+	}
+	name := r.fetchDisplayName(uid)
+	if name != uid {
+		cache[uid] = name
+		_ = r.saveCache(cache)
+	}
+	return name
+}
+
 // ResolveUsers replaces user IDs in the "user" field of each message
 // with display names. Unknown users are fetched via the users.info API
 // and added to the on-disk cache. If the API fails for a given user,

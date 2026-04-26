@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "saved_items": [
+    {
+      "item_type": "message",
+      "item_id": "C01PUBLICCH",
+      "ts": "1776462228.751799",
+      "date_created": 1776462664,
+      "date_completed": 0,
+      "date_due": 0,
+      "date_snoozed_until": 0,
+      "date_updated": 1776462664,
+      "state": "in_progress",
+      "todo_state": "saved",
+      "is_archived": false
+    },
+    {
+      "item_type": "message",
+      "item_id": "D01DM000001",
+      "ts": "1776546930.781449",
+      "date_created": 1776561738,
+      "date_completed": 0,
+      "date_due": 0,
+      "date_snoozed_until": 0,
+      "date_updated": 1776561738,
+      "state": "in_progress",
+      "todo_state": "saved",
+      "is_archived": false
+    },
+    {
+      "item_type": "message",
+      "item_id": "G01MPIM0001",
+      "ts": "1776400000.000001",
+      "date_created": 1776400100,
+      "date_completed": 0,
+      "date_due": 0,
+      "date_snoozed_until": 0,
+      "date_updated": 1776400100,
+      "state": "in_progress",
+      "todo_state": "saved",
+      "is_archived": false
+    },
+    {
+      "item_type": "message",
+      "item_id": "C01ARCHIVED",
+      "ts": "1776300000.000001",
+      "date_created": 1776300100,
+      "state": "archived",
+      "todo_state": "archived",
+      "is_archived": true
+    }
+  ],
+  "response_metadata": {
+    "next_cursor": ""
+  },
+  "counts": {
+    "archived_count": 1,
+    "completed_count": 0,
+    "total_count": 4,
+    "uncompleted_count": 3,
+    "uncompleted_overdue_count": 0
+  }
+}

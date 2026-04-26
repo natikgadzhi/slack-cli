@@ -55,7 +55,7 @@ func NewClient(xoxc, xoxd string, opts ...Option) *Client {
 		xoxc:           xoxc,
 		xoxd:           xoxd,
 		httpClient:     &http.Client{Timeout: defaultTimeout, Transport: rt},
-		baseURL:        config.SlackAPIBase,
+		baseURL:        config.SlackAPIBase(),
 		pageDelay:      defaultPageDelay,
 		sleepFn:        time.Sleep,
 		retryTransport: rt,

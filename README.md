@@ -70,6 +70,7 @@ slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels search eng
 slack-cli search "deployment failed" --limit 10
+slack-cli saved --limit 50
 slack-cli users
 ```
 
@@ -187,6 +188,28 @@ slack-cli search --from U12345 --sort recent
 
 At least one of a query argument or `--from` is required.
 
+### `saved`
+
+List messages saved from the Slack "Later" / saved-items view, sorted in
+reverse-chronological order by when each item was saved.
+
+```sh
+slack-cli saved
+slack-cli saved --limit 100
+slack-cli saved -o json | jq '.[] | .text'
+```
+
+Columns (table output): conversation name, date, message. In a capable terminal,
+the conversation cell and date cell render as OSC-8 hyperlinks (the conversation
+opens the channel on Slack, the date opens the message permalink). Channel
+references and user mentions inside message text are replaced with readable
+names; multi-person DMs are named by their participant list; emoji shortcodes
+(`:thread:` → 🧵) are substituted.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `50` | Maximum number of saved messages to return |
+
 ### `users`
 
 List workspace users.
@@ -227,6 +250,16 @@ When no `-o` flag is provided, slack-cli auto-detects: **table** when stdout is 
 ## Cache
 
 Results are cached as Markdown files with YAML frontmatter in `~/.local/share/lambdal/derived/slack-cli/`. Override with `SLACK_DATA_DIR`, `SLACK_CLI_DERIVED_DIR`, or `LAMBDAL_DERIVED_DIR` environment variables.
+
+## Slack API endpoint
+
+All Slack HTTP calls go through a single base URL, which defaults to
+`https://slack.com/api`. Override it with `SLACK_BASE_URL` — useful for tests
+that stub the Slack API via `httptest`:
+
+```sh
+SLACK_BASE_URL=http://127.0.0.1:12345/api slack-cli saved
+```
 
 To skip the cache for a request, pass the `--no-cache` flag:
 
