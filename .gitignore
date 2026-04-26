@@ -5,3 +5,6 @@
 
 # Local environment variables (for E2E tests)
 .env
+
+# Claude Code scheduled-task lock
+.claude/scheduled_tasks.lock
