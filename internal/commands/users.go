@@ -8,10 +8,10 @@ import (
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
-	"github.com/natikgadzhi/cli-kit/table"
 )
 
 var usersCmd = &cobra.Command{
