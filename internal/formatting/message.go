@@ -30,7 +30,16 @@ type Attachment struct {
 }
 
 // FormatMessage converts a raw Slack API message (map[string]any) into a Message struct.
+// It applies emoji shortcode substitution to all text fields. To additionally
+// substitute <@U…>/<#C…>/<url|label> references, use FormatMessageWith.
 func FormatMessage(raw map[string]any) Message {
+	return FormatMessageWith(raw, nil, nil)
+}
+
+// FormatMessageWith is like FormatMessage but uses the provided resolvers to
+// replace Slack mrkdwn link references with human-readable text. Either
+// resolver may be nil.
+func FormatMessageWith(raw map[string]any, users UserResolver, channels ChannelResolver) Message {
 	var msg Message
 
 	if ts, ok := raw["ts"].(string); ok && ts != "" {
@@ -48,6 +57,8 @@ func FormatMessage(raw map[string]any) Message {
 	if text, ok := raw["text"].(string); ok {
 		text = strings.TrimSpace(text)
 		if text != "" {
+			text = ReplaceMrkdwnLinks(text, users, channels)
+			text = ReplaceEmojiShortcodes(text)
 			msg.Text = TruncateRunes(text, 500)
 		}
 	}

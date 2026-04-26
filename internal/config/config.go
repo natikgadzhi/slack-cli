@@ -5,12 +5,23 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/natikgadzhi/cli-kit/derived"
 )
 
-// SlackAPIBase is the base URL for the Slack Web API.
-const SlackAPIBase = "https://slack.com/api"
+// DefaultSlackAPIBase is the production base URL for the Slack Web API.
+const DefaultSlackAPIBase = "https://slack.com/api"
+
+// SlackAPIBase returns the base URL for the Slack Web API.
+// Override with the SLACK_BASE_URL environment variable (trailing "/" trimmed).
+// This is intended for tests that stub the Slack API via httptest.
+func SlackAPIBase() string {
+	if v := os.Getenv("SLACK_BASE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return DefaultSlackAPIBase
+}
 
 // UserAgent is the browser user-agent string sent with API requests
 // to match what a normal browser session would send.

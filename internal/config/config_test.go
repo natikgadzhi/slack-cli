@@ -9,9 +9,17 @@ import (
 
 // --- Constants ---
 
-func TestSlackAPIBase(t *testing.T) {
-	if SlackAPIBase != "https://slack.com/api" {
-		t.Errorf("SlackAPIBase = %q, want %q", SlackAPIBase, "https://slack.com/api")
+func TestSlackAPIBase_Default(t *testing.T) {
+	t.Setenv("SLACK_BASE_URL", "")
+	if got := SlackAPIBase(); got != "https://slack.com/api" {
+		t.Errorf("SlackAPIBase() = %q, want %q", got, "https://slack.com/api")
+	}
+}
+
+func TestSlackAPIBase_Override(t *testing.T) {
+	t.Setenv("SLACK_BASE_URL", "http://127.0.0.1:12345/api/")
+	if got := SlackAPIBase(); got != "http://127.0.0.1:12345/api" {
+		t.Errorf("SlackAPIBase() = %q, want trimmed override", got)
 	}
 }
 
