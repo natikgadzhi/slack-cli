@@ -39,7 +39,7 @@ Verify the stored credentials:
 slack-cli auth check
 ```
 
-Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to `natikgadzhi`.
+Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to the current OS user (`whoami`). Override with `SLACK_KEYCHAIN_ACCOUNT`.
 
 Override with environment variables:
 

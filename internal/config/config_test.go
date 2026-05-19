@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,10 +35,19 @@ func TestUserAgent(t *testing.T) {
 
 // --- KeychainAccount ---
 
+// The default keychain account is the current OS user's login name (whoami),
+// not a hardcoded literal — so the tool is portable across machines and users.
 func TestKeychainAccountDefault(t *testing.T) {
 	t.Setenv("SLACK_KEYCHAIN_ACCOUNT", "")
-	if got := KeychainAccount(); got != "natikgadzhi" {
-		t.Errorf("KeychainAccount() = %q, want %q", got, "natikgadzhi")
+	u, err := user.Current()
+	if err != nil {
+		t.Fatalf("user.Current() failed on test host: %v", err)
+	}
+	if u.Username == "" {
+		t.Fatalf("user.Current() returned an empty username")
+	}
+	if got := KeychainAccount(); got != u.Username {
+		t.Errorf("KeychainAccount() = %q, want current OS user %q", got, u.Username)
 	}
 }
 
@@ -45,6 +55,20 @@ func TestKeychainAccountOverride(t *testing.T) {
 	t.Setenv("SLACK_KEYCHAIN_ACCOUNT", "other-user")
 	if got := KeychainAccount(); got != "other-user" {
 		t.Errorf("KeychainAccount() = %q, want %q", got, "other-user")
+	}
+}
+
+// The override takes precedence over the OS user. This guards against a
+// regression where the env var lookup gets dropped or reordered.
+func TestKeychainAccountOverrideBeatsCurrentUser(t *testing.T) {
+	u, err := user.Current()
+	if err != nil || u.Username == "" {
+		t.Skipf("cannot determine current user on this host: %v", err)
+	}
+	t.Setenv("SLACK_KEYCHAIN_ACCOUNT", "pinned-account")
+	if got := KeychainAccount(); got != "pinned-account" {
+		t.Errorf("KeychainAccount() = %q, want %q (override should beat current user %q)",
+			got, "pinned-account", u.Username)
 	}
 }
 
