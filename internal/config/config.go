@@ -4,6 +4,7 @@ package config
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -30,12 +31,17 @@ const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
 	"Chrome/124.0.0.0 Safari/537.36"
 
 // KeychainAccount returns the macOS Keychain account name.
+// It defaults to the current OS user's username so credentials are stored
+// under whoever is running the CLI, rather than a hardcoded account.
 // Override with the SLACK_KEYCHAIN_ACCOUNT environment variable.
 func KeychainAccount() string {
 	if v := os.Getenv("SLACK_KEYCHAIN_ACCOUNT"); v != "" {
 		return v
 	}
-	return "natikgadzhi"
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return ""
 }
 
 // KeychainXoxcService returns the Keychain service name for the xoxc token.

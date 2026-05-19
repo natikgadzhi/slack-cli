@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,8 +37,12 @@ func TestUserAgent(t *testing.T) {
 
 func TestKeychainAccountDefault(t *testing.T) {
 	t.Setenv("SLACK_KEYCHAIN_ACCOUNT", "")
-	if got := KeychainAccount(); got != "natikgadzhi" {
-		t.Errorf("KeychainAccount() = %q, want %q", got, "natikgadzhi")
+	u, err := user.Current()
+	if err != nil {
+		t.Fatalf("cannot determine current user: %v", err)
+	}
+	if got := KeychainAccount(); got != u.Username {
+		t.Errorf("KeychainAccount() = %q, want current user %q", got, u.Username)
 	}
 }
 
