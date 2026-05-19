@@ -94,6 +94,17 @@ Check if Slack tokens are configured and valid.
 slack-cli auth check
 ```
 
+For each token it reports the source (environment variable or keychain account)
+and any copy-paste artifacts it cleaned up (surrounding whitespace/quotes, a
+`Bearer ` prefix, or a leading `d=` cookie name). If `auth.test` rejects the
+credentials, it explains the Slack error code (e.g. `invalid_auth`) in plain
+English and prints a checklist of likely fixes — most commonly, the `xoxc`
+token and `xoxd` cookie must be copied from the *same* logged-in browser
+session.
+
+Note: the `d` (`xoxd`) cookie is percent-encoded in the browser and is sent to
+Slack in exactly that form — do not URL-decode it before storing.
+
 ### `auth set-xoxc`
 
 Store an xoxc token in the macOS Keychain.

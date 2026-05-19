@@ -122,3 +122,66 @@ func TestSanitizeToken(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeXoxd(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantClean    string
+		wantWarnings []string
+	}{
+		{
+			name:         "plain cookie unchanged",
+			input:        "xoxd-abc/def+ghi=",
+			wantClean:    "xoxd-abc/def+ghi=",
+			wantWarnings: nil,
+		},
+		{
+			name:         "percent-encoded cookie left encoded (Slack expects this form)",
+			input:        "xoxd-abc%2Fdef%2Bghi%3D",
+			wantClean:    "xoxd-abc%2Fdef%2Bghi%3D",
+			wantWarnings: nil,
+		},
+		{
+			name:         "strips d= cookie-name prefix",
+			input:        "d=xoxd-abc123",
+			wantClean:    "xoxd-abc123",
+			wantWarnings: []string{`had "d=" cookie-name prefix — stripped`},
+		},
+		{
+			name:      "strips d= prefix but preserves encoding",
+			input:     "d=xoxd-abc%2Fdef",
+			wantClean: "xoxd-abc%2Fdef",
+			wantWarnings: []string{
+				`had "d=" cookie-name prefix — stripped`,
+			},
+		},
+		{
+			name:      "trims whitespace, preserves encoding",
+			input:     "  xoxd-abc%2Fdef  ",
+			wantClean: "xoxd-abc%2Fdef",
+			wantWarnings: []string{
+				"had leading/trailing whitespace — stripped",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clean, warnings := NormalizeXoxd(tc.input)
+
+			if clean != tc.wantClean {
+				t.Errorf("NormalizeXoxd(%q) clean = %q, want %q", tc.input, clean, tc.wantClean)
+			}
+			if len(warnings) != len(tc.wantWarnings) {
+				t.Errorf("NormalizeXoxd(%q) got %d warnings, want %d: %v", tc.input, len(warnings), len(tc.wantWarnings), warnings)
+				return
+			}
+			for i, w := range warnings {
+				if w != tc.wantWarnings[i] {
+					t.Errorf("NormalizeXoxd(%q) warning[%d] = %q, want %q", tc.input, i, w, tc.wantWarnings[i])
+				}
+			}
+		})
+	}
+}
