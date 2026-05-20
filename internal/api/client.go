@@ -127,7 +127,7 @@ func (c *Client) Call(endpoint string, params map[string]string) (map[string]any
 			if e, has := result["error"].(string); has {
 				errMsg = e
 			}
-			cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
+			cliErr := clierrors.NewCLIError(clierrors.ExitError, slackAPIErrorPrefix+errMsg)
 			cliErr = cliErr.WithCode(resp.StatusCode)
 			return nil, cliErr
 		}

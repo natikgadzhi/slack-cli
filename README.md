@@ -41,6 +41,12 @@ slack-cli auth check
 
 Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to the current OS user (`whoami`). Override with `SLACK_KEYCHAIN_ACCOUNT`.
 
+`auth set-xoxd` accepts either the URL-encoded form of the xoxd cookie (with
+`%XX` escapes, the way browsers send it) or the raw (decoded) form. Raw
+values are auto-encoded before storage and a `[WARN]` line tells you what
+was changed — so it's safe to paste whichever copy of the cookie you grabbed
+from devtools.
+
 Override with environment variables:
 
 | Variable                | Description                          |

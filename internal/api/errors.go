@@ -5,10 +5,16 @@ package api
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 )
+
+// slackAPIErrorPrefix is the literal prefix used by client.Call when it wraps
+// a Slack `{"ok": false, "error": "<code>"}` body into a CLIError. The
+// SlackCode helper below strips it to recover the bare Slack error code.
+const slackAPIErrorPrefix = "slack api: "
 
 // APIError represents a non-OK response from the Slack API.
 // Code is the HTTP status code; Message contains the response body excerpt.
@@ -60,4 +66,20 @@ func AsCLIError(err error) (*clierrors.CLIError, bool) {
 		return cliErr, true
 	}
 	return nil, false
+}
+
+// SlackCode returns the Slack-side error code (e.g. "invalid_auth",
+// "not_authed", "token_expired") if err was produced by a Slack
+// `{"ok": false, "error": "<code>"}` response wrapped by client.Call.
+// Returns "" if err is not that shape — callers can use the empty result as
+// a signal that this isn't a Slack-level error.
+func SlackCode(err error) string {
+	cliErr, ok := AsCLIError(err)
+	if !ok {
+		return ""
+	}
+	if !strings.HasPrefix(cliErr.Message, slackAPIErrorPrefix) {
+		return ""
+	}
+	return strings.TrimPrefix(cliErr.Message, slackAPIErrorPrefix)
 }

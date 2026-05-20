@@ -52,6 +52,15 @@ func init() {
 
 // runAuthCheck validates stored Slack tokens by calling auth.test.
 // All output goes to stderr (not affected by -o flag).
+//
+// On a failed auth.test, runAuthCheck:
+//   - extracts the Slack error code via api.SlackCode,
+//   - if the code points at credential trouble (invalid_auth, not_authed,
+//     invalid_cookie), retries auth.test with the alternate xoxd encoding
+//     (encode-or-decode, whichever the stored value isn't already in) and
+//     reports which form worked plus how to make the fix permanent,
+//   - otherwise prints a plain-English explanation + actionable hint via
+//     slackAuthErrorHint.
 func runAuthCheck(cmd *cobra.Command, args []string) error {
 	w := os.Stderr
 
@@ -63,12 +72,17 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 		checkToken(w, "xoxc", xoxc, "xoxc-")
 	}
 
-	// Check xoxd cookie.
+	// Check xoxd cookie. Include an encoding-state diagnostic.
 	xoxd, xoxdErr := auth.GetXoxd()
 	if xoxdErr != nil {
 		_, _ = fmt.Fprintf(w, "[FAIL] xoxd: %v\n", xoxdErr)
 	} else {
 		checkToken(w, "xoxd", xoxd, "xoxd-")
+		if auth.LooksURLEncoded(xoxd) {
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: looks URL-encoded")
+		} else {
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: looks raw (not URL-encoded) — Slack expects URL-encoded form on the wire")
+		}
 	}
 
 	// If either token is missing, stop here.
@@ -76,39 +90,137 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("one or more tokens are not configured")
 	}
 
-	// Try API call with the raw tokens.
+	// Primary attempt with the stored xoxd as-is.
 	client := api.NewClient(xoxc, xoxd)
-	result, err := client.Call("auth.test", nil)
-	if err == nil {
+	if result, err := client.Call("auth.test", nil); err == nil {
 		user, _ := result["user"].(string)
 		team, _ := result["team"].(string)
 		_, _ = fmt.Fprintf(w, "[OK] authenticated as %s on %s\n", user, team)
 		return nil
+	} else if !tryFallbacksAndReport(w, xoxc, xoxd, err) {
+		return fmt.Errorf("authentication failed")
 	}
+	return nil
+}
 
-	// auth.test failed. Print the error.
-	if cliErr, ok := api.AsCLIError(err); ok {
-		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", cliErr.Message)
-	} else if apiErr, ok := api.AsAPIError(err); ok {
-		_, _ = fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
-	} else {
-		_, _ = fmt.Fprintf(w, "[FAIL] %v\n", err)
-	}
+// tryFallbacksAndReport handles a failed auth.test. It returns true when a
+// fallback xoxd encoding succeeds (so the caller can return success), and
+// false when all attempts have been exhausted. Either way it has already
+// written the user-facing diagnostic to w.
+func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) bool {
+	code := api.SlackCode(primaryErr)
 
-	// Try URL-decoded xoxd as fallback.
-	xoxdDecoded, decodeErr := url.QueryUnescape(xoxd)
-	if decodeErr == nil && xoxdDecoded != xoxd {
-		clientDecoded := api.NewClient(xoxc, xoxdDecoded)
-		resultDecoded, err := clientDecoded.Call("auth.test", nil)
-		if err == nil {
-			user, _ := resultDecoded["user"].(string)
-			team, _ := resultDecoded["team"].(string)
-			_, _ = fmt.Fprintf(w, "[OK] authenticated (url-decoded xoxd) as %s on %s\n", user, team)
-			return nil
+	// For credential-shaped errors, try the opposite encoding of what's stored.
+	if code == "invalid_auth" || code == "not_authed" || code == "invalid_cookie" || code == "no_auth_in_cookie" {
+		for _, fb := range xoxdFallbacks(xoxd) {
+			client := api.NewClient(xoxc, fb.value)
+			result, err := client.Call("auth.test", nil)
+			if err != nil {
+				continue
+			}
+			user, _ := result["user"].(string)
+			team, _ := result["team"].(string)
+			_, _ = fmt.Fprintf(w, "[OK] authenticated using %s xoxd as %s on %s\n", fb.label, user, team)
+			_, _ = fmt.Fprintf(w, "[HINT] re-run `slack-cli auth set-xoxd %q` to normalize storage — set-xoxd auto-encodes if needed\n", fb.value)
+			return true
 		}
 	}
 
-	return fmt.Errorf("authentication failed")
+	// No fallback succeeded — print the primary error with explanation + hint.
+	printPrimaryFailure(w, primaryErr, code)
+	return false
+}
+
+// xoxdFallback is one alternate encoding of an xoxd cookie value that
+// auth check will try after the primary auth.test fails.
+type xoxdFallback struct {
+	label string // human-readable, e.g. "URL-encoded" or "URL-decoded"
+	value string // the xoxd value to send
+}
+
+// xoxdFallbacks returns the alternate-encoding attempts worth trying for a
+// stored xoxd. Empty alternates and ones equal to the original are filtered
+// so we never retry the same value.
+func xoxdFallbacks(xoxd string) []xoxdFallback {
+	out := make([]xoxdFallback, 0, 2)
+
+	if !auth.LooksURLEncoded(xoxd) {
+		if encoded := url.QueryEscape(xoxd); encoded != "" && encoded != xoxd {
+			out = append(out, xoxdFallback{label: "URL-encoded", value: encoded})
+		}
+	} else {
+		if decoded, err := url.QueryUnescape(xoxd); err == nil && decoded != "" && decoded != xoxd {
+			out = append(out, xoxdFallback{label: "URL-decoded", value: decoded})
+		}
+	}
+	return out
+}
+
+// printPrimaryFailure renders the primary auth.test error in human terms.
+// code is api.SlackCode(err) — "" when the error wasn't a Slack-level one.
+func printPrimaryFailure(w io.Writer, err error, code string) {
+	switch {
+	case code != "":
+		explanation, remedy := slackAuthErrorHint(code)
+		if explanation == "" {
+			_, _ = fmt.Fprintf(w, "[FAIL] slack api: %s\n", code)
+		} else {
+			_, _ = fmt.Fprintf(w, "[FAIL] slack api: %s — %s\n", code, explanation)
+		}
+		if remedy != "" {
+			_, _ = fmt.Fprintf(w, "[HINT] %s\n", remedy)
+		}
+	default:
+		if cliErr, ok := api.AsCLIError(err); ok {
+			_, _ = fmt.Fprintf(w, "[FAIL] %s\n", cliErr.Message)
+		} else if apiErr, ok := api.AsAPIError(err); ok {
+			_, _ = fmt.Fprintf(w, "[FAIL] %s\n", apiErr.Message)
+		} else {
+			_, _ = fmt.Fprintf(w, "[FAIL] %v\n", err)
+		}
+	}
+}
+
+// slackAuthErrorHint maps a Slack error code (e.g. "invalid_auth") to a
+// plain-English explanation and an actionable remedy. The remedy is what
+// the user should do next; it's printed as a [HINT] line. Returns "", ""
+// when the code is unrecognized so the caller can fall back to the raw
+// error message.
+func slackAuthErrorHint(code string) (explanation, remedy string) {
+	switch code {
+	case "invalid_auth", "not_authed":
+		return "Slack rejected the credentials.",
+			"Most common cause: xoxd was pasted in raw form (not URL-encoded). " +
+				"Re-extract xoxc and xoxd from a fresh browser session, then re-run " +
+				"`slack-cli auth set-xoxc <token>` and `slack-cli auth set-xoxd <cookie>` " +
+				"— set-xoxd auto-encodes the cookie now."
+	case "invalid_cookie", "no_auth_in_cookie":
+		return "Slack didn't accept the d cookie.",
+			"Re-extract xoxd from your browser session. set-xoxd accepts either the " +
+				"URL-encoded form (with %XX escapes) or the raw form — raw values are " +
+				"auto-encoded for you."
+	case "token_expired":
+		return "Your token has expired.",
+			"Re-extract a fresh xoxc from your browser session and re-run `slack-cli auth set-xoxc`."
+	case "token_revoked":
+		return "Your token was revoked.",
+			"Sign in to Slack again in your browser, then re-extract both xoxc and xoxd."
+	case "account_inactive":
+		return "Your account is inactive on this workspace.",
+			"Contact your workspace admin, or switch to a workspace where your account is active."
+	case "missing_scope", "no_permission":
+		return "Your session lacks the required scope for this call.",
+			"Make sure you copied xoxc from a fully logged-in regular browser session " +
+				"(not a guest or limited-access session)."
+	case "user_is_bot":
+		return "This is a bot (xoxb) token — slack-cli needs a user (xoxc) token.",
+			"Extract an xoxc token from a regular user browser session, not a bot integration."
+	case "org_login_with_sso":
+		return "This workspace requires SSO login.",
+			"Complete SSO sign-in in your browser first, then re-extract xoxc and xoxd."
+	default:
+		return "", ""
+	}
 }
 
 // checkToken prints diagnostics about a single token to the given writer.
@@ -146,9 +258,11 @@ func storeXoxcToken(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// storeXoxdToken sanitizes and stores the xoxd cookie in the OS keychain.
+// storeXoxdToken sanitizes, normalizes, and stores the xoxd cookie in the
+// OS keychain. The normalization step auto-encodes raw (non-URL-encoded)
+// values so the stored form is always what Slack expects on the wire.
 func storeXoxdToken(cmd *cobra.Command, args []string) error {
-	token, warnings := auth.SanitizeToken(args[0])
+	token, warnings := auth.SanitizeXoxd(args[0])
 	for _, warn := range warnings {
 		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
 	}
