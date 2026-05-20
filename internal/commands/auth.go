@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"strings"
 
 	cliauth "github.com/natikgadzhi/cli-kit/auth"
 	"github.com/spf13/cobra"
@@ -64,24 +63,22 @@ func init() {
 func runAuthCheck(cmd *cobra.Command, args []string) error {
 	w := os.Stderr
 
-	// Check xoxc token.
-	xoxc, xoxcErr := auth.GetXoxc()
+	xoxcCred, xoxcErr := auth.ResolveXoxc()
 	if xoxcErr != nil {
 		_, _ = fmt.Fprintf(w, "[FAIL] xoxc: %v\n", xoxcErr)
 	} else {
-		checkToken(w, "xoxc", xoxc, "xoxc-")
+		reportCredential(w, "xoxc", xoxcCred, "xoxc-")
 	}
 
-	// Check xoxd cookie. Include an encoding-state diagnostic.
-	xoxd, xoxdErr := auth.GetXoxd()
+	xoxdCred, xoxdErr := auth.ResolveXoxd()
 	if xoxdErr != nil {
 		_, _ = fmt.Fprintf(w, "[FAIL] xoxd: %v\n", xoxdErr)
 	} else {
-		checkToken(w, "xoxd", xoxd, "xoxd-")
-		if auth.LooksURLEncoded(xoxd) {
-			_, _ = fmt.Fprintln(w, "[INFO] xoxd: stored as URL-encoded")
+		reportCredential(w, "xoxd", xoxdCred, "xoxd-")
+		if auth.LooksURLEncoded(xoxdCred.Token) {
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: using URL-encoded wire form")
 		} else {
-			_, _ = fmt.Fprintln(w, "[INFO] xoxd: stored as raw — will be auto-encoded on the wire")
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: using raw wire form")
 		}
 	}
 
@@ -92,7 +89,7 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 
 	// Primary attempt. api.Client.Call wire-normalizes xoxd to URL-encoded
 	// form before sending, so raw stored values "just work" here.
-	client := api.NewClient(xoxc, xoxd)
+	client := api.NewClient(xoxcCred.Token, xoxdCred.Token)
 	if result, err := client.Call("auth.test", nil); err == nil {
 		user, _ := result["user"].(string)
 		team, _ := result["team"].(string)
@@ -100,29 +97,28 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 		// Opportunistically clean up the keychain so future reads of the
 		// stored value match the wire form. No-op if xoxd is already
 		// canonical or if SLACK_XOXD is set via env var.
-		persistCanonicalXoxd(w, xoxd)
+		persistCanonicalXoxd(w, xoxdCred)
 		return nil
-	} else if !tryFallbacksAndReport(w, xoxc, xoxd, err) {
+	} else if !tryFallbacksAndReport(w, xoxcCred, xoxdCred, err) {
 		return fmt.Errorf("authentication failed")
 	}
 	return nil
 }
 
-// persistCanonicalXoxd writes the canonical (URL-encoded) form of stored
+// persistCanonicalXoxd writes the canonical (URL-encoded) form of stored xoxd
 // back into the keychain when it differs from what's already there, so
 // future reads return the wire form directly. No-op if:
 //   - stored is already canonical (auth.NormalizeXoxd leaves it unchanged), or
-//   - SLACK_XOXD is set via env var (the env var owns the value; writing to
-//     keychain would silently disagree with what's actually used on the wire).
+//   - the value came from an env var (the env var owns what is used).
 //
 // Failures to write are non-fatal — the wire normalization in client.Call
 // has already made the request work; this is just hygiene.
-func persistCanonicalXoxd(w io.Writer, stored string) {
-	if os.Getenv("SLACK_XOXD") != "" {
+func persistCanonicalXoxd(w io.Writer, stored auth.Credential) {
+	if stored.Source != cliauth.SourceKeychain {
 		return
 	}
-	canonical, _ := auth.NormalizeXoxd(stored)
-	if canonical == stored {
+	canonical, _ := auth.SanitizeXoxd(stored.RawToken)
+	if canonical == stored.RawToken {
 		return
 	}
 	if err := auth.StoreXoxd(canonical); err != nil {
@@ -135,7 +131,7 @@ func persistCanonicalXoxd(w io.Writer, stored string) {
 // fallback xoxd encoding succeeds (so the caller can return success), and
 // false when all attempts have been exhausted. Either way it has already
 // written the user-facing diagnostic to w.
-func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) bool {
+func tryFallbacksAndReport(w io.Writer, xoxc, xoxd auth.Credential, primaryErr error) bool {
 	code := api.SlackCode(primaryErr)
 
 	// For credential-shaped errors, try the opposite encoding of what's
@@ -144,8 +140,8 @@ func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) boo
 	// `%2B`) — the common raw-xoxd case is handled at the transport layer
 	// before we get here.
 	if code == "invalid_auth" || code == "not_authed" || code == "invalid_cookie" || code == "no_auth_in_cookie" {
-		for _, fb := range xoxdFallbacks(xoxd) {
-			client := api.NewClient(xoxc, fb.value)
+		for _, fb := range xoxdFallbacks(xoxd.Token) {
+			client := api.NewClient(xoxc.Token, fb.value)
 			result, err := client.Call("auth.test", nil)
 			if err != nil {
 				continue
@@ -155,8 +151,9 @@ func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) boo
 			_, _ = fmt.Fprintf(w, "[OK] authenticated using %s xoxd as %s on %s\n", fb.label, user, team)
 			// Persist the working form so subsequent calls hit the primary
 			// path. Skipped if SLACK_XOXD is set via env var (env owns it).
-			if os.Getenv("SLACK_XOXD") == "" {
-				if err := auth.StoreXoxd(fb.value); err == nil {
+			if xoxd.Source == cliauth.SourceKeychain {
+				working, _ := auth.SanitizeXoxd(fb.value)
+				if err := auth.StoreXoxd(working); err == nil {
 					_, _ = fmt.Fprintln(w, "[INFO] saved the working xoxd form to keychain — future calls will use it directly")
 				}
 			}
@@ -166,6 +163,10 @@ func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) boo
 
 	// No fallback succeeded — print the primary error with explanation + hint.
 	printPrimaryFailure(w, primaryErr, code)
+	if xoxc.Source != "" && xoxd.Source != "" && xoxc.Source != xoxd.Source {
+		_, _ = fmt.Fprintf(w, "[HINT] xoxc came from %s but xoxd came from %s; refresh both from the same browser session and source.\n",
+			sourceLabel(xoxc.Source), sourceLabel(xoxd.Source))
+	}
 	return false
 }
 
@@ -187,7 +188,7 @@ func xoxdFallbacks(xoxd string) []xoxdFallback {
 			out = append(out, xoxdFallback{label: "URL-encoded", value: encoded})
 		}
 	} else {
-		if decoded, err := url.QueryUnescape(xoxd); err == nil && decoded != "" && decoded != xoxd {
+		if decoded, err := url.PathUnescape(xoxd); err == nil && decoded != "" && decoded != xoxd {
 			out = append(out, xoxdFallback{label: "URL-decoded", value: decoded})
 		}
 	}
@@ -228,10 +229,7 @@ func slackAuthErrorHint(code string) (explanation, remedy string) {
 	switch code {
 	case "invalid_auth", "not_authed":
 		return "Slack rejected the credentials.",
-			"Most common cause: xoxd was pasted in raw form (not URL-encoded). " +
-				"Re-extract xoxc and xoxd from a fresh browser session, then re-run " +
-				"`slack-cli auth set-xoxc <token>` and `slack-cli auth set-xoxd <cookie>` " +
-				"— set-xoxd auto-encodes the cookie now."
+			"Re-extract xoxc and xoxd from the same fresh browser session. If one came from env and the other from keychain, refresh both — stale mixes are the usual foot-gun."
 	case "invalid_cookie", "no_auth_in_cookie":
 		return "Slack didn't accept the d cookie.",
 			"Re-extract xoxd from your browser session. set-xoxd accepts either the " +
@@ -261,24 +259,32 @@ func slackAuthErrorHint(code string) (explanation, remedy string) {
 	}
 }
 
-// checkToken prints diagnostics about a single token to the given writer.
-// Token values are masked using cli-kit/auth.MaskToken.
-func checkToken(w io.Writer, name, token, expectedPrefix string) {
-	clean, warnings := auth.SanitizeToken(token)
-
-	for _, warn := range warnings {
+// reportCredential prints a masked token preview, where it came from, and any
+// cleanup that was applied before the API call.
+func reportCredential(w io.Writer, name string, cred auth.Credential, expectedPrefix string) {
+	for _, warn := range cred.Warnings {
 		_, _ = fmt.Fprintf(w, "[WARN] %s: %s\n", name, warn)
 	}
 
-	// Show masked token preview using cli-kit/auth.MaskToken.
-	masked := cliauth.MaskToken(clean)
-	_, _ = fmt.Fprintf(w, "[INFO] %s: %s (length %d)\n", name, masked, len(clean))
+	masked := cliauth.MaskToken(cred.Token)
+	_, _ = fmt.Fprintf(w, "[INFO] %s: %s (length %d, from %s)\n",
+		name, masked, len(cred.Token), sourceLabel(cred.Source))
 
-	// Check expected prefix.
-	if !strings.HasPrefix(clean, expectedPrefix) {
+	if len(cred.Token) < len(expectedPrefix) || cred.Token[:len(expectedPrefix)] != expectedPrefix {
 		_, _ = fmt.Fprintf(w, "[WARN] %s: expected prefix %q not found\n", name, expectedPrefix)
 	} else {
 		_, _ = fmt.Fprintf(w, "[OK] %s: has expected prefix %q\n", name, expectedPrefix)
+	}
+}
+
+func sourceLabel(source string) string {
+	switch source {
+	case cliauth.SourceEnvironment:
+		return "environment variable"
+	case cliauth.SourceKeychain:
+		return fmt.Sprintf("keychain (account %q)", config.KeychainAccount())
+	default:
+		return source
 	}
 }
 

@@ -86,12 +86,11 @@ func (c *Client) Call(endpoint string, params map[string]string) (map[string]any
 	}
 	req.Header.Set("Authorization", "Bearer "+c.xoxc)
 	// Normalize xoxd to the URL-encoded form Slack expects on the wire.
-	// The stored value may be raw (e.g. when copied from Chrome's Application
-	// → Cookies panel) or already encoded — auth.NormalizeXoxd is idempotent.
+	// The value may be raw, already encoded, or copied as "d=xoxd-...".
 	// Doing this at the transport layer means env-var users, raw-keychain
 	// users, and freshly normalized stores all hit the wire correctly without
 	// any caller having to think about it.
-	wireXoxd, _ := auth.NormalizeXoxd(c.xoxd)
+	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
 	req.Header.Set("Cookie", "d="+wireXoxd)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 	req.Header.Set("User-Agent", config.UserAgent)

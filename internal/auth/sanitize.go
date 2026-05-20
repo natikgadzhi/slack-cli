@@ -33,6 +33,16 @@ func SanitizeToken(token string) (string, []string) {
 	return t, warnings
 }
 
+// StripCookieName removes a leading cookie-name prefix from a copied cookie
+// value, e.g. "d=xoxd-...".
+func StripCookieName(token, name string) (string, bool) {
+	prefix := name + "="
+	if len(token) < len(prefix) || !strings.EqualFold(token[:len(prefix)], prefix) {
+		return token, false
+	}
+	return token[len(prefix):], true
+}
+
 // LooksURLEncoded reports whether s contains at least one %XX percent-escape
 // (where XX are two hex digits). This is a strong indicator that s is
 // already in URL-encoded form and should not be re-encoded.
@@ -88,11 +98,16 @@ func NormalizeXoxd(s string) (normalized string, warning string) {
 	return encoded, "xoxd appears to be in raw (decoded) form — auto-encoded to URL-encoded form for Cookie header compatibility"
 }
 
-// SanitizeXoxd is SanitizeToken followed by NormalizeXoxd. Use this for the
-// xoxd cookie path (e.g. `auth set-xoxd`) so values are both cleaned of
-// copy-paste artifacts and normalized to the wire form Slack expects.
+// SanitizeXoxd is SanitizeToken, "d=" cookie-name stripping, and NormalizeXoxd.
+// Use this for the xoxd cookie path so values are both cleaned of copy-paste
+// artifacts and normalized to the wire form Slack expects.
 func SanitizeXoxd(token string) (string, []string) {
 	clean, warnings := SanitizeToken(token)
+	var stripped bool
+	clean, stripped = StripCookieName(clean, "d")
+	if stripped {
+		warnings = append(warnings, `had "d=" cookie-name prefix — stripped`)
+	}
 	normalized, w := NormalizeXoxd(clean)
 	if w != "" {
 		warnings = append(warnings, w)

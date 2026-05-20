@@ -127,6 +127,31 @@ func TestCall_WireLeavesEncodedXoxdAlone(t *testing.T) {
 	}
 }
 
+func TestCall_WireStripsCopiedCookieName(t *testing.T) {
+	const copiedXoxd = "d=xoxd-X+y/Z="
+	const wantWire = "d=xoxd-X%2By%2FZ%3D"
+
+	var gotCookie string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := NewClient("xoxc-test-token", copiedXoxd,
+		WithBaseURL(srv.URL),
+		WithPageDelay(0),
+		WithTimeout(5*time.Second),
+	)
+	if _, err := client.Call("auth.test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCookie != wantWire {
+		t.Errorf("Cookie header = %q, want %q (copied d= prefix should be stripped)", gotCookie, wantWire)
+	}
+}
+
 func TestCall_ParamsEncoding(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {

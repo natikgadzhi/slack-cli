@@ -71,6 +71,12 @@ func TestXoxdFallbacks(t *testing.T) {
 			wantValue: "xoxd-X+y/Z=",
 		},
 		{
+			name:      "URL-decoded fallback preserves literal plus",
+			input:     "xoxd-X%2By+raw",
+			wantLabel: "URL-decoded",
+			wantValue: "xoxd-X+y+raw",
+		},
+		{
 			name:      "plain value (no special chars) yields no fallback",
 			input:     "xoxd-AbCdEf123456",
 			wantLabel: "",

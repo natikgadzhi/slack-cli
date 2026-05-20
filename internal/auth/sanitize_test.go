@@ -220,4 +220,24 @@ func TestSanitizeXoxd(t *testing.T) {
 	if len(warnings) != 0 {
 		t.Errorf("SanitizeXoxd encoded passthrough: got %d warnings, want 0: %v", len(warnings), warnings)
 	}
+
+	clean, warnings = SanitizeXoxd("d=xoxd-X+y/Z=")
+	if clean != want {
+		t.Errorf("SanitizeXoxd d= prefix: got %q, want %q", clean, want)
+	}
+	if len(warnings) != 2 {
+		t.Errorf("SanitizeXoxd d= prefix: got %d warnings, want 2: %v", len(warnings), warnings)
+	}
+}
+
+func TestStripCookieName(t *testing.T) {
+	got, stripped := StripCookieName("D=xoxd-abc", "d")
+	if !stripped || got != "xoxd-abc" {
+		t.Errorf("StripCookieName case-insensitive = (%q, %v), want stripped xoxd-abc", got, stripped)
+	}
+
+	got, stripped = StripCookieName("xoxd-abc", "d")
+	if stripped || got != "xoxd-abc" {
+		t.Errorf("StripCookieName without prefix = (%q, %v), want unchanged false", got, stripped)
+	}
 }
