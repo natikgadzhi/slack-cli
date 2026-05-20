@@ -15,6 +15,7 @@ import (
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/ratelimit"
 
+	"github.com/natikgadzhi/slack-cli/internal/auth"
 	"github.com/natikgadzhi/slack-cli/internal/config"
 )
 
@@ -84,7 +85,13 @@ func (c *Client) Call(endpoint string, params map[string]string) (map[string]any
 		return nil, fmt.Errorf("creating request for %s: %w", endpoint, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.xoxc)
-	req.Header.Set("Cookie", "d="+c.xoxd)
+	// Normalize xoxd to the URL-encoded form Slack expects on the wire.
+	// The value may be raw, already encoded, or copied as "d=xoxd-...".
+	// Doing this at the transport layer means env-var users, raw-keychain
+	// users, and freshly normalized stores all hit the wire correctly without
+	// any caller having to think about it.
+	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
+	req.Header.Set("Cookie", "d="+wireXoxd)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 	req.Header.Set("User-Agent", config.UserAgent)
 
@@ -127,7 +134,7 @@ func (c *Client) Call(endpoint string, params map[string]string) (map[string]any
 			if e, has := result["error"].(string); has {
 				errMsg = e
 			}
-			cliErr := clierrors.NewCLIError(clierrors.ExitError, fmt.Sprintf("slack api: %s", errMsg))
+			cliErr := clierrors.NewCLIError(clierrors.ExitError, slackAPIErrorPrefix+errMsg)
 			cliErr = cliErr.WithCode(resp.StatusCode)
 			return nil, cliErr
 		}

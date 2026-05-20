@@ -4,6 +4,7 @@ package config
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -29,13 +30,26 @@ const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
 	"AppleWebKit/537.36 (KHTML, like Gecko) " +
 	"Chrome/124.0.0.0 Safari/537.36"
 
-// KeychainAccount returns the macOS Keychain account name.
-// Override with the SLACK_KEYCHAIN_ACCOUNT environment variable.
+// KeychainAccount returns the macOS Keychain account name used to store the
+// Slack xoxc token and xoxd cookie.
+//
+// Resolution order (first non-empty wins):
+//  1. SLACK_KEYCHAIN_ACCOUNT environment variable.
+//  2. The current OS user's login name (os/user.Current).
+//  3. The USER environment variable, as a fallback if user.Current fails
+//     (e.g. statically linked builds without cgo, broken NSS, etc.).
+//  4. The literal "slack-cli", so the return value is always non-empty.
 func KeychainAccount() string {
 	if v := os.Getenv("SLACK_KEYCHAIN_ACCOUNT"); v != "" {
 		return v
 	}
-	return "natikgadzhi"
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	if v := os.Getenv("USER"); v != "" {
+		return v
+	}
+	return "slack-cli"
 }
 
 // KeychainXoxcService returns the Keychain service name for the xoxc token.

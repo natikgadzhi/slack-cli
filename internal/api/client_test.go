@@ -70,6 +70,88 @@ func TestCall_CorrectHeaders(t *testing.T) {
 	}
 }
 
+// TestCall_WireNormalizesXoxd verifies that a raw (non-URL-encoded) xoxd
+// stored on the client is URL-encoded just before being placed in the Cookie
+// header. Without this, `Cookie: d=xoxd-X+y/Z=` goes out on the wire as-is
+// and Slack rejects it with `invalid_auth`.
+func TestCall_WireNormalizesXoxd(t *testing.T) {
+	const rawXoxd = "xoxd-X+y/Z="
+	const wantWire = "d=xoxd-X%2By%2FZ%3D"
+
+	var gotCookie string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := NewClient("xoxc-test-token", rawXoxd,
+		WithBaseURL(srv.URL),
+		WithPageDelay(0),
+		WithTimeout(5*time.Second),
+	)
+	if _, err := client.Call("auth.test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCookie != wantWire {
+		t.Errorf("Cookie header = %q, want %q (raw xoxd should be URL-encoded at the transport layer)", gotCookie, wantWire)
+	}
+}
+
+// TestCall_WireLeavesEncodedXoxdAlone verifies that an already-URL-encoded
+// xoxd stored on the client is sent through unchanged — i.e. wire
+// normalization is idempotent and doesn't double-encode.
+func TestCall_WireLeavesEncodedXoxdAlone(t *testing.T) {
+	const encodedXoxd = "xoxd-X%2By%2FZ%3D"
+	const wantWire = "d=xoxd-X%2By%2FZ%3D"
+
+	var gotCookie string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := NewClient("xoxc-test-token", encodedXoxd,
+		WithBaseURL(srv.URL),
+		WithPageDelay(0),
+		WithTimeout(5*time.Second),
+	)
+	if _, err := client.Call("auth.test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCookie != wantWire {
+		t.Errorf("Cookie header = %q, want %q (already-encoded xoxd must not be re-encoded)", gotCookie, wantWire)
+	}
+}
+
+func TestCall_WireStripsCopiedCookieName(t *testing.T) {
+	const copiedXoxd = "d=xoxd-X+y/Z="
+	const wantWire = "d=xoxd-X%2By%2FZ%3D"
+
+	var gotCookie string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer srv.Close()
+
+	client := NewClient("xoxc-test-token", copiedXoxd,
+		WithBaseURL(srv.URL),
+		WithPageDelay(0),
+		WithTimeout(5*time.Second),
+	)
+	if _, err := client.Call("auth.test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCookie != wantWire {
+		t.Errorf("Cookie header = %q, want %q (copied d= prefix should be stripped)", gotCookie, wantWire)
+	}
+}
+
 func TestCall_ParamsEncoding(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {

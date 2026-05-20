@@ -39,7 +39,12 @@ Verify the stored credentials:
 slack-cli auth check
 ```
 
-Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to `natikgadzhi`.
+Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to the current OS user (`whoami`). Override with `SLACK_KEYCHAIN_ACCOUNT`.
+
+`auth set-xoxd` accepts the URL-encoded form of the xoxd cookie (with `%XX`
+escapes), the raw decoded form, or the full copied `d=xoxd-...` cookie pair.
+Raw values are auto-encoded before storage and `[WARN]` lines tell you what was
+changed.
 
 Override with environment variables:
 
@@ -93,6 +98,10 @@ Check if Slack tokens are configured and valid.
 ```sh
 slack-cli auth check
 ```
+
+It reports whether each token came from the environment or Keychain, explains
+Slack auth errors in plain English, and saves a working Keychain xoxd form when
+it can prove one with `auth.test`.
 
 ### `auth set-xoxc`
 

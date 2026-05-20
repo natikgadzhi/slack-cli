@@ -1,12 +1,12 @@
 package auth
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 // SanitizeToken strips common copy-paste artifacts from a token string.
 // It returns the cleaned token and a list of warnings describing what was stripped.
-//
-// NOTE: This function is not yet wired into CLI commands; it will be integrated
-// when the "auth set-xoxc" / "auth set-xoxd" commands are implemented in a later task.
 func SanitizeToken(token string) (string, []string) {
 	var warnings []string
 
@@ -31,4 +31,86 @@ func SanitizeToken(token string) (string, []string) {
 	}
 
 	return t, warnings
+}
+
+// StripCookieName removes a leading cookie-name prefix from a copied cookie
+// value, e.g. "d=xoxd-...".
+func StripCookieName(token, name string) (string, bool) {
+	prefix := name + "="
+	if len(token) < len(prefix) || !strings.EqualFold(token[:len(prefix)], prefix) {
+		return token, false
+	}
+	return token[len(prefix):], true
+}
+
+// LooksURLEncoded reports whether s contains at least one %XX percent-escape
+// (where XX are two hex digits). This is a strong indicator that s is
+// already in URL-encoded form and should not be re-encoded.
+func LooksURLEncoded(s string) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] != '%' {
+			continue
+		}
+		if isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHexDigit(b byte) bool {
+	switch {
+	case b >= '0' && b <= '9':
+		return true
+	case b >= 'a' && b <= 'f':
+		return true
+	case b >= 'A' && b <= 'F':
+		return true
+	}
+	return false
+}
+
+// NormalizeXoxd returns the canonical URL-encoded form of an xoxd cookie
+// value. The Slack `d` cookie value must be safe for an HTTP Cookie header,
+// which means characters like `+`, `/`, and `=` need to be percent-encoded.
+// Different browsers and devtools panels show the cookie in either form, so
+// users often paste the raw (decoded) variant by mistake — that goes out on
+// the wire as-is and Slack silently rejects it with `invalid_auth`.
+//
+// Behavior:
+//   - If s already looks URL-encoded (contains %XX), it is returned unchanged
+//     so we never double-encode.
+//   - Otherwise s is passed through url.QueryEscape. If that changes the
+//     value, a non-empty warning describes what happened; if it doesn't
+//     (no special characters needed encoding), the warning is empty.
+func NormalizeXoxd(s string) (normalized string, warning string) {
+	if s == "" {
+		return s, ""
+	}
+	if LooksURLEncoded(s) {
+		return s, ""
+	}
+	encoded := url.QueryEscape(s)
+	if encoded == s {
+		// Nothing needed encoding; safe to send as-is.
+		return s, ""
+	}
+	return encoded, "xoxd appears to be in raw (decoded) form — auto-encoded to URL-encoded form for Cookie header compatibility"
+}
+
+// SanitizeXoxd is SanitizeToken, "d=" cookie-name stripping, and NormalizeXoxd.
+// Use this for the xoxd cookie path so values are both cleaned of copy-paste
+// artifacts and normalized to the wire form Slack expects.
+func SanitizeXoxd(token string) (string, []string) {
+	clean, warnings := SanitizeToken(token)
+	var stripped bool
+	clean, stripped = StripCookieName(clean, "d")
+	if stripped {
+		warnings = append(warnings, `had "d=" cookie-name prefix — stripped`)
+	}
+	normalized, w := NormalizeXoxd(clean)
+	if w != "" {
+		warnings = append(warnings, w)
+	}
+	return normalized, warnings
 }

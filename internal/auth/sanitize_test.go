@@ -122,3 +122,122 @@ func TestSanitizeToken(t *testing.T) {
 		})
 	}
 }
+
+func TestLooksURLEncoded(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"", false},
+		{"plain", false},
+		{"xoxd-abc-def", false},
+		{"xoxd-X+y/Z=", false},      // raw — needs encoding, not encoded
+		{"xoxd-X%2By%2FZ%3D", true}, // %2B, %2F, %3D present
+		{"%2B", true},               // minimal positive
+		{"%aB", true},               // mixed-case hex
+		{"%ZZ", false},              // %XX present but XX not hex
+		{"trailing-%", false},       // bare % at end
+		{"%2", false},               // truncated %X
+		{"xoxd-%20-encoded-space", true},
+		{"50%-off", false}, // % not followed by hex
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			if got := LooksURLEncoded(tc.input); got != tc.want {
+				t.Errorf("LooksURLEncoded(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeXoxd(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantOut     string
+		wantWarning bool
+	}{
+		{
+			name:        "raw form with special chars gets encoded",
+			input:       "xoxd-X+y/Z=",
+			wantOut:     "xoxd-X%2By%2FZ%3D",
+			wantWarning: true,
+		},
+		{
+			name:        "already URL-encoded passes through",
+			input:       "xoxd-X%2By%2FZ%3D",
+			wantOut:     "xoxd-X%2By%2FZ%3D",
+			wantWarning: false,
+		},
+		{
+			name:        "plain base64 without special chars passes through",
+			input:       "xoxd-AbCdEf123456",
+			wantOut:     "xoxd-AbCdEf123456",
+			wantWarning: false,
+		},
+		{
+			name:        "empty string passes through",
+			input:       "",
+			wantOut:     "",
+			wantWarning: false,
+		},
+		{
+			name:        "mixed: looks encoded, leave alone even if contains raw chars",
+			input:       "xoxd-X%2By+raw/here",
+			wantOut:     "xoxd-X%2By+raw/here",
+			wantWarning: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, warning := NormalizeXoxd(tc.input)
+			if got != tc.wantOut {
+				t.Errorf("NormalizeXoxd(%q) out = %q, want %q", tc.input, got, tc.wantOut)
+			}
+			if (warning != "") != tc.wantWarning {
+				t.Errorf("NormalizeXoxd(%q) warning = %q, want non-empty? %v", tc.input, warning, tc.wantWarning)
+			}
+		})
+	}
+}
+
+func TestSanitizeXoxd(t *testing.T) {
+	// Combined: whitespace + quotes + raw form → cleaned + encoded with three warnings.
+	clean, warnings := SanitizeXoxd(`  "xoxd-X+y/Z="  `)
+	const want = "xoxd-X%2By%2FZ%3D"
+	if clean != want {
+		t.Errorf("SanitizeXoxd combined: got %q, want %q", clean, want)
+	}
+	if len(warnings) != 3 {
+		t.Errorf("SanitizeXoxd combined: got %d warnings, want 3: %v", len(warnings), warnings)
+	}
+
+	// Already-encoded value with no copy-paste cruft → no changes, no warnings.
+	clean, warnings = SanitizeXoxd("xoxd-X%2By%2FZ%3D")
+	if clean != "xoxd-X%2By%2FZ%3D" {
+		t.Errorf("SanitizeXoxd encoded passthrough: got %q", clean)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("SanitizeXoxd encoded passthrough: got %d warnings, want 0: %v", len(warnings), warnings)
+	}
+
+	clean, warnings = SanitizeXoxd("d=xoxd-X+y/Z=")
+	if clean != want {
+		t.Errorf("SanitizeXoxd d= prefix: got %q, want %q", clean, want)
+	}
+	if len(warnings) != 2 {
+		t.Errorf("SanitizeXoxd d= prefix: got %d warnings, want 2: %v", len(warnings), warnings)
+	}
+}
+
+func TestStripCookieName(t *testing.T) {
+	got, stripped := StripCookieName("D=xoxd-abc", "d")
+	if !stripped || got != "xoxd-abc" {
+		t.Errorf("StripCookieName case-insensitive = (%q, %v), want stripped xoxd-abc", got, stripped)
+	}
+
+	got, stripped = StripCookieName("xoxd-abc", "d")
+	if stripped || got != "xoxd-abc" {
+		t.Errorf("StripCookieName without prefix = (%q, %v), want unchanged false", got, stripped)
+	}
+}
