@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -197,18 +198,93 @@ func storeXoxcToken(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// storeXoxdToken normalizes and stores the xoxd cookie in the OS keychain.
-// NormalizeXoxd strips a "d=" prefix and URL-decodes the value so the stored
-// cookie matches what the API expects.
+// storeXoxdToken normalizes, verifies, and stores the xoxd cookie.
+//
+// The browser's "d" cookie is percent-encoded and Slack expects that exact
+// form, but users sometimes paste the decoded value (right length, wrong
+// bytes). Rather than guess, we verify against auth.test: try the pasted form
+// and its opposite encoding, and store whichever Slack accepts. Verification
+// needs an xoxc token already present; without one (or offline), we store the
+// value as pasted and say so.
 func storeXoxdToken(cmd *cobra.Command, args []string) error {
 	token, warnings := auth.NormalizeXoxd(args[0])
 	for _, warn := range warnings {
 		fmt.Fprintf(os.Stderr, "[WARN] %s\n", warn)
 	}
-	if err := auth.StoreXoxd(token); err != nil {
+
+	toStore := token
+	if xoxc, err := auth.GetXoxc(); err == nil && xoxc != "" {
+		if working, ok := probeXoxd(xoxc, xoxdCandidates(token)); ok {
+			toStore = working
+			if working == token {
+				fmt.Fprintf(os.Stderr, "[OK] verified cookie against auth.test\n")
+			} else {
+				fmt.Fprintf(os.Stderr,
+					"[INFO] the pasted cookie authenticated only after re-encoding; storing the %s\n",
+					encodingLabel(working))
+			}
+		} else {
+			fmt.Fprintf(os.Stderr,
+				"[WARN] auth.test rejected this cookie in both encodings — it may be invalid/expired, "+
+					"or the xoxc token may be stale. Storing it as pasted; run 'slack-cli auth check' to diagnose.\n")
+		}
+	} else {
+		fmt.Fprintf(os.Stderr,
+			"[INFO] no xoxc token found yet, so the cookie can't be verified; storing as pasted. "+
+				"Set xoxc, then run 'slack-cli auth check'.\n")
+	}
+
+	if err := auth.StoreXoxd(toStore); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "Stored xoxd cookie in keychain (service=%q, account=%q)\n",
 		config.KeychainXoxdService(), config.KeychainAccount())
 	return nil
+}
+
+// xoxdCandidates returns the distinct encodings of an xoxd cookie to try against
+// auth.test: the value as given, plus its opposite encoding. If the value looks
+// percent-encoded (contains "%") we also try the decoded form; otherwise we also
+// try the percent-encoded form.
+//
+// The decoded xoxd value is "xoxd-" + base64 (alphabet A-Za-z0-9+/=), so
+// url.QueryEscape reproduces exactly the browser's encoding here: it leaves the
+// unreserved characters alone and escapes +, /, and = to %2B, %2F, %3D.
+func xoxdCandidates(value string) []string {
+	candidates := []string{value}
+
+	var alt string
+	if strings.Contains(value, "%") {
+		// PathUnescape (not QueryUnescape) so a literal "+" is left intact.
+		if decoded, err := url.PathUnescape(value); err == nil {
+			alt = decoded
+		}
+	} else {
+		alt = url.QueryEscape(value)
+	}
+
+	if alt != "" && alt != value {
+		candidates = append(candidates, alt)
+	}
+	return candidates
+}
+
+// probeXoxd calls auth.test with each candidate cookie and returns the first one
+// Slack accepts. The xoxc token is held constant.
+func probeXoxd(xoxc string, candidates []string) (string, bool) {
+	for _, cand := range candidates {
+		client := api.NewClient(xoxc, cand)
+		if _, err := client.Call("auth.test", nil); err == nil {
+			return cand, true
+		}
+	}
+	return "", false
+}
+
+// encodingLabel describes which wire form a cookie value is in, for messages.
+func encodingLabel(value string) string {
+	if strings.Contains(value, "%") {
+		return "URL-encoded form"
+	}
+	return "raw (decoded) form"
 }

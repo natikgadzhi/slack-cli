@@ -121,6 +121,13 @@ Store an xoxd cookie in the macOS Keychain.
 slack-cli auth set-xoxd xoxd-...
 ```
 
+The `d` cookie is percent-encoded in the browser and Slack expects that exact
+form. If an xoxc token is already stored, `set-xoxd` verifies the cookie against
+`auth.test` and, if the pasted value was decoded, automatically stores the
+re-encoded form that authenticates — so it works whether you paste the encoded
+or the raw value. A leading `d=` cookie name is stripped automatically. Without
+an xoxc token (or offline), the value is stored as pasted and a note is printed.
+
 ### `message`
 
 Fetch a single Slack message or thread by URL.
