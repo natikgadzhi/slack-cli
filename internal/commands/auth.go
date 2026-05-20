@@ -79,9 +79,9 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 	} else {
 		checkToken(w, "xoxd", xoxd, "xoxd-")
 		if auth.LooksURLEncoded(xoxd) {
-			_, _ = fmt.Fprintln(w, "[INFO] xoxd: looks URL-encoded")
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: stored as URL-encoded")
 		} else {
-			_, _ = fmt.Fprintln(w, "[INFO] xoxd: looks raw (not URL-encoded) — Slack expects URL-encoded form on the wire")
+			_, _ = fmt.Fprintln(w, "[INFO] xoxd: stored as raw — will be auto-encoded on the wire")
 		}
 	}
 
@@ -90,17 +90,45 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("one or more tokens are not configured")
 	}
 
-	// Primary attempt with the stored xoxd as-is.
+	// Primary attempt. api.Client.Call wire-normalizes xoxd to URL-encoded
+	// form before sending, so raw stored values "just work" here.
 	client := api.NewClient(xoxc, xoxd)
 	if result, err := client.Call("auth.test", nil); err == nil {
 		user, _ := result["user"].(string)
 		team, _ := result["team"].(string)
 		_, _ = fmt.Fprintf(w, "[OK] authenticated as %s on %s\n", user, team)
+		// Opportunistically clean up the keychain so future reads of the
+		// stored value match the wire form. No-op if xoxd is already
+		// canonical or if SLACK_XOXD is set via env var.
+		persistCanonicalXoxd(w, xoxd)
 		return nil
 	} else if !tryFallbacksAndReport(w, xoxc, xoxd, err) {
 		return fmt.Errorf("authentication failed")
 	}
 	return nil
+}
+
+// persistCanonicalXoxd writes the canonical (URL-encoded) form of stored
+// back into the keychain when it differs from what's already there, so
+// future reads return the wire form directly. No-op if:
+//   - stored is already canonical (auth.NormalizeXoxd leaves it unchanged), or
+//   - SLACK_XOXD is set via env var (the env var owns the value; writing to
+//     keychain would silently disagree with what's actually used on the wire).
+//
+// Failures to write are non-fatal — the wire normalization in client.Call
+// has already made the request work; this is just hygiene.
+func persistCanonicalXoxd(w io.Writer, stored string) {
+	if os.Getenv("SLACK_XOXD") != "" {
+		return
+	}
+	canonical, _ := auth.NormalizeXoxd(stored)
+	if canonical == stored {
+		return
+	}
+	if err := auth.StoreXoxd(canonical); err != nil {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "[INFO] normalized stored xoxd to URL-encoded form in keychain")
 }
 
 // tryFallbacksAndReport handles a failed auth.test. It returns true when a
@@ -110,7 +138,11 @@ func runAuthCheck(cmd *cobra.Command, args []string) error {
 func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) bool {
 	code := api.SlackCode(primaryErr)
 
-	// For credential-shaped errors, try the opposite encoding of what's stored.
+	// For credential-shaped errors, try the opposite encoding of what's
+	// stored. With wire-level normalization in api.Client.Call this branch
+	// mainly catches the rare double-encoded case (e.g. `%252B` instead of
+	// `%2B`) — the common raw-xoxd case is handled at the transport layer
+	// before we get here.
 	if code == "invalid_auth" || code == "not_authed" || code == "invalid_cookie" || code == "no_auth_in_cookie" {
 		for _, fb := range xoxdFallbacks(xoxd) {
 			client := api.NewClient(xoxc, fb.value)
@@ -121,7 +153,13 @@ func tryFallbacksAndReport(w io.Writer, xoxc, xoxd string, primaryErr error) boo
 			user, _ := result["user"].(string)
 			team, _ := result["team"].(string)
 			_, _ = fmt.Fprintf(w, "[OK] authenticated using %s xoxd as %s on %s\n", fb.label, user, team)
-			_, _ = fmt.Fprintf(w, "[HINT] re-run `slack-cli auth set-xoxd %q` to normalize storage — set-xoxd auto-encodes if needed\n", fb.value)
+			// Persist the working form so subsequent calls hit the primary
+			// path. Skipped if SLACK_XOXD is set via env var (env owns it).
+			if os.Getenv("SLACK_XOXD") == "" {
+				if err := auth.StoreXoxd(fb.value); err == nil {
+					_, _ = fmt.Fprintln(w, "[INFO] saved the working xoxd form to keychain — future calls will use it directly")
+				}
+			}
 			return true
 		}
 	}
