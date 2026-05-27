@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "items": [
+    {
+      "feed_ts": "1776600000.000300",
+      "item": {
+        "type": "at_user",
+        "message": {
+          "channel": "C01ENG00000",
+          "ts": "1776600000.000300",
+          "author_user_id": "U01MIKE000",
+          "text": "hey <@U01NATIK00> can you review? :thread:"
+        }
+      }
+    },
+    {
+      "feed_ts": "1776595000.000200",
+      "item": {
+        "type": "message_reaction",
+        "reaction": { "user": "U01ALICE00", "name": "thumbsup" },
+        "message": {
+          "channel": "C01ENG00000",
+          "ts": "1776594000.000000",
+          "user": "U01NATIK00",
+          "text": "shipped the fix"
+        }
+      }
+    }
+  ],
+  "response_metadata": { "next_cursor": "" }
+}

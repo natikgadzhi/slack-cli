@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "subtype": "bot_message",
+      "bot_id": "B01DEPLOY0",
+      "text": "Deploy succeeded :rocket:",
+      "ts": "1776580000.000400"
+    }
+  ],
+  "has_more": false
+}

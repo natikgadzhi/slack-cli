@@ -411,3 +411,24 @@ func TestToInt_Nil(t *testing.T) {
 		t.Error("toInt(nil) should return false")
 	}
 }
+
+func TestFormatMessage_UnescapesAttachmentEntities(t *testing.T) {
+	msg := FormatMessage(map[string]any{
+		"ts": "1700000000.000000",
+		"attachments": []any{
+			map[string]any{
+				"title": "Build A &gt; B failed",
+				"text":  "exit if x &lt; 0 &amp;&amp; retry",
+			},
+		},
+	})
+	if msg.Attachment == nil {
+		t.Fatal("expected an attachment")
+	}
+	if msg.Attachment.Title != "Build A > B failed" {
+		t.Errorf("title = %q", msg.Attachment.Title)
+	}
+	if msg.Attachment.Text != "exit if x < 0 && retry" {
+		t.Errorf("text = %q", msg.Attachment.Text)
+	}
+}

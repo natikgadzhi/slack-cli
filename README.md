@@ -76,6 +76,7 @@ slack-cli channels list
 slack-cli channels search eng
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
+slack-cli unread --limit 50
 slack-cli users
 ```
 
@@ -218,6 +219,67 @@ names; multi-person DMs are named by their participant list; emoji shortcodes
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-n`, `--limit` | `50` | Maximum number of saved messages to return |
+
+### `unread`
+
+List messages in your unread queue that you'd be **notified** about — not every
+unread message in every channel, only the ones worth a ping. Specifically:
+
+- **Channel @-mentions** — `@you`, `@user-group`, `@here`, `@channel`, `@everyone`
+- **Keyword highlights** — messages containing your configured "My keywords"
+- **Channel invitations** — being invited/added to a channel
+- **1:1 DMs** (all unread)
+- **Group DMs / MPIMs** (all unread)
+- **Thread replies** in threads you follow (all unread replies)
+
+Reactions to your messages and bot/app DMs are excluded by default; opt in with
+`--include-reactions` and `--include-apps`.
+
+```sh
+slack-cli unread
+slack-cli unread --limit 100
+slack-cli unread --include-reactions --include-apps
+slack-cli unread -o json | jq '.[] | {kind, conversation, text}'
+```
+
+Reading is **non-destructive**: running this command never marks anything as read —
+the reported messages stay unread/bold/badged in Slack afterward.
+
+When you're mentioned inside a thread, the rest of that thread's unread messages are
+pulled in too (via `conversations.replies`), so you see the surrounding replies, not
+just the one message that mentioned you.
+
+In the **table**, a conversation stream with several unread messages collapses to a
+single line — the latest message, with a `[+N]` badge for the others. This applies to
+threads and to DMs / group DMs / app DMs (so a chatty DM is one row, not many); channel
+mentions and reactions stay on their own rows. **JSON** and the cached/`--derived`
+**Markdown** always keep every individual message.
+
+Columns (table output): conversation name, date, message. As with `saved`, the
+conversation and date cells render as OSC-8 hyperlinks in a capable terminal,
+channel/user references and emoji shortcodes are resolved, HTML entities (`&gt;` →
+`>`) are decoded, and multi-person DMs are named by their participant list. JSON rows
+additionally carry a `kind` field (`mention` / `keyword` / `invite` / `dm` /
+`group_dm` / `thread` / `reaction` / `app`) for programmatic filtering, plus
+`conversation_url`, `permalink`, `user`, and `thread_ts` (for thread replies).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `50` | Maximum number of unread messages to return |
+| `--include-reactions` | `false` | Include reactions to your messages |
+| `--include-apps` | `false` | Include direct messages from bots and apps |
+
+Data sources: mentions, keyword highlights, channel invitations (and opt-in reactions)
+come from Slack's internal Activity feed (`activity.feed`); subscribed-thread replies
+from `subscriptions.thread.getView`; the messages surrounding a thread mention from
+`conversations.replies`; 1:1 DMs, group DMs, and (with `--include-apps`) bot/app DMs
+from `client.counts` + `conversations.history`. These are the same browser endpoints
+the Slack web client uses.
+
+Notes / limitations: only the most recent page (up to 100) of unread messages per DM
+is fetched, so very large unread backlogs may be truncated; muted channels are not
+specially handled; thread-reply permalinks open the reply's channel (the `thread_ts`
+is included in JSON for context).
 
 ### `users`
 

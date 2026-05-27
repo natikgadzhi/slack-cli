@@ -45,3 +45,33 @@ func TestReplaceMrkdwnLinks_NilResolvers(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestUnescapeEntities(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"a &gt; b", "a > b"},
+		{"x &lt; y", "x < y"},
+		{"Tom &amp; Jerry", "Tom & Jerry"},
+		{"&gt; quoted line", "> quoted line"},
+		{"&amp;lt; stays escaped once", "&lt; stays escaped once"},
+		{"", ""},
+		{"nothing here", "nothing here"},
+	}
+	for _, c := range cases {
+		if got := UnescapeEntities(c.in); got != c.want {
+			t.Errorf("UnescapeEntities(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestFormatMessage_UnescapesEntities is an integration check that the shared
+// formatter turns Slack's &gt;/&lt;/&amp; back into real characters.
+func TestFormatMessage_UnescapesEntities(t *testing.T) {
+	msg := FormatMessage(map[string]any{
+		"ts":   "1700000000.000000",
+		"text": "if x &gt; 0 &amp;&amp; y &lt; 10",
+	})
+	want := "if x > 0 && y < 10"
+	if msg.Text != want {
+		t.Errorf("FormatMessage text = %q, want %q", msg.Text, want)
+	}
+}

@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "threads": [
+    {
+      "root_msg": {
+        "channel": "C01THREAD00",
+        "ts": "1776500000.000000",
+        "user": "U01MEG0000",
+        "text": "Planning thread",
+        "reply_count": 2,
+        "reply_users": ["U01MEG0000", "U01NATIK00"]
+      },
+      "unread_replies": [
+        {
+          "type": "message",
+          "ts": "1776590000.000100",
+          "user": "U01MEG0000",
+          "text": "bumping this <@U01NATIK00>"
+        },
+        {
+          "type": "message",
+          "ts": "1776590500.000000",
+          "user": "U01ALICE00",
+          "text": "yeah let's sync on it"
+        }
+      ],
+      "latest_replies": [
+        {
+          "type": "message",
+          "ts": "1776590500.000000",
+          "user": "U01ALICE00",
+          "text": "yeah let's sync on it"
+        }
+      ]
+    }
+  ]
+}

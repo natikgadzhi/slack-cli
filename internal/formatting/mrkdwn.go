@@ -97,6 +97,21 @@ func renderMrkdwnToken(inner string, users UserResolver, channels ChannelResolve
 	}
 }
 
+// entityReplacer reverses the only three HTML entities Slack escapes in
+// message text: &amp;, &lt;, &gt;. The order matters — &amp; must be undone
+// last so that "&amp;lt;" becomes "&lt;" rather than "<".
+var entityReplacer = strings.NewReplacer("&lt;", "<", "&gt;", ">", "&amp;", "&")
+
+// UnescapeEntities converts Slack's HTML-escaped entities (&amp;, &lt;, &gt;)
+// back into their literal characters. Call this AFTER ReplaceMrkdwnLinks so the
+// angle-bracket reference parser isn't confused by user-typed "&lt;"/"&gt;".
+func UnescapeEntities(s string) string {
+	if s == "" {
+		return s
+	}
+	return entityReplacer.Replace(s)
+}
+
 // splitLabel splits a mrkdwn token body on "|" into (body, label).
 func splitLabel(inner string) (body, label string) {
 	if idx := strings.Index(inner, "|"); idx >= 0 {

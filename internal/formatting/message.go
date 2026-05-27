@@ -58,6 +58,7 @@ func FormatMessageWith(raw map[string]any, users UserResolver, channels ChannelR
 		text = strings.TrimSpace(text)
 		if text != "" {
 			text = ReplaceMrkdwnLinks(text, users, channels)
+			text = UnescapeEntities(text)
 			text = ReplaceEmojiShortcodes(text)
 			msg.Text = TruncateRunes(text, 500)
 		}
@@ -98,7 +99,7 @@ func buildAttachment(att map[string]any) *Attachment {
 	empty := true
 
 	if title, ok := att["title"].(string); ok && title != "" {
-		a.Title = title
+		a.Title = UnescapeEntities(title)
 		empty = false
 	}
 
@@ -109,7 +110,7 @@ func buildAttachment(att map[string]any) *Attachment {
 	} else if fb, ok := att["fallback"].(string); ok {
 		text = fb
 	}
-	text = strings.TrimSpace(text)
+	text = UnescapeEntities(strings.TrimSpace(text))
 	text = TruncateRunes(text, 300)
 	if text != "" {
 		a.Text = text
