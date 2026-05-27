@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "user": "U01DIVYA00",
+      "text": "Heads up for Monday, see <#C01ENG00000|eng> for details :wave:",
+      "ts": "1776546930.781449"
+    },
+    {
+      "type": "message",
+      "user": "U01DIVYA00",
+      "text": "this one is already read (boundary)",
+      "ts": "1776546930.000000"
+    }
+  ],
+  "has_more": false
+}

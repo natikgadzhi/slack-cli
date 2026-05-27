@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "channels": [
+    { "id": "C01ENG00000", "has_unreads": true, "mention_count": 1, "last_read": "1776599000.000000" },
+    { "id": "C01NOISE000", "has_unreads": true, "mention_count": 0, "last_read": "1776000000.000000" }
+  ],
+  "mpims": [
+    { "id": "G01MPIM0001", "has_unreads": true, "mention_count": 0, "last_read": "1776400000.000000" }
+  ],
+  "ims": [
+    { "id": "D01DM000001", "has_unreads": true, "mention_count": 0, "last_read": "1776546930.000000" },
+    { "id": "D01READ0000", "has_unreads": false, "mention_count": 0, "last_read": "1776000000.000000" },
+    { "id": "D01APPDM001", "has_unreads": true, "mention_count": 0, "last_read": "1776580000.000000" }
+  ],
+  "threads": {
+    "unread_count_by_channel": { "C01THREAD00": 1 }
+  }
+}
