@@ -17,6 +17,7 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
 	internalOutput "github.com/natikgadzhi/slack-cli/internal/output"
+	"github.com/natikgadzhi/slack-cli/internal/users"
 )
 
 var searchCmd = &cobra.Command{
@@ -68,8 +69,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	format := output.Resolve(cmd)
 
-	// Set up client (no user resolver needed for search results).
-	client, err := setupClientOnly()
+	// Set up client and user resolver. The resolver is used to turn the
+	// partner user ID that 1:1 DM hits carry in their channel name into a
+	// readable display name.
+	client, resolver, err := setupClient()
 	if err != nil {
 		return err
 	}
@@ -120,9 +123,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 		if ch, ok := m["channel"].(map[string]any); ok {
-			if name, ok := ch["name"].(string); ok {
-				r["channel"] = name
-			}
+			r["channel"] = searchChannelLabel(ch, resolver)
 		}
 
 		if user, ok := m["username"].(string); ok && user != "" {
@@ -223,6 +224,27 @@ func resolveSearchSort(sortFlag, queryArg, from string) (sort, sortDir string) {
 		// "relevance" is Slack's default; no need to send sort params.
 		return "", ""
 	}
+}
+
+// searchChannelLabel returns a human-readable label for a search hit's
+// conversation. For 1:1 DMs the Slack API reports the partner's user ID in both
+// the channel name and the channel "user" field, so we resolve it to a display
+// name prefixed with "@". Regular channels and group DMs already carry a
+// readable name (e.g. "general", "mpdm-...") and are returned as-is.
+func searchChannelLabel(ch map[string]any, resolver *users.UserResolver) string {
+	name, _ := ch["name"].(string)
+
+	if isIM, _ := ch["is_im"].(bool); isIM {
+		uid, _ := ch["user"].(string)
+		if uid == "" {
+			uid = name
+		}
+		if uid != "" {
+			return "@" + resolver.DisplayName(uid)
+		}
+	}
+
+	return name
 }
 
 // extractSearchMatches pulls the matches array from a search.messages response.

@@ -1,8 +1,69 @@
 package commands
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/natikgadzhi/slack-cli/internal/api"
+	"github.com/natikgadzhi/slack-cli/internal/users"
 )
+
+// newCachedResolver returns a UserResolver backed by a temp on-disk cache
+// pre-seeded with the given uid->name map, so DisplayName resolves offline.
+func newCachedResolver(t *testing.T, seed map[string]string) *users.UserResolver {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "users.json")
+	data, err := json.Marshal(seed)
+	if err != nil {
+		t.Fatalf("marshal seed: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write seed: %v", err)
+	}
+	t.Setenv("SLACK_USER_CACHE", path)
+
+	resolver, err := users.NewUserResolver(api.NewClient("", ""))
+	if err != nil {
+		t.Fatalf("new resolver: %v", err)
+	}
+	return resolver
+}
+
+func TestSearchChannelLabel_RegularChannel(t *testing.T) {
+	resolver := newCachedResolver(t, map[string]string{})
+	ch := map[string]any{"name": "general"}
+	if got := searchChannelLabel(ch, resolver); got != "general" {
+		t.Fatalf("got %q, want %q", got, "general")
+	}
+}
+
+func TestSearchChannelLabel_GroupDM(t *testing.T) {
+	resolver := newCachedResolver(t, map[string]string{})
+	ch := map[string]any{"name": "mpdm-matts--alice--bob-1", "is_mpim": true}
+	if got := searchChannelLabel(ch, resolver); got != "mpdm-matts--alice--bob-1" {
+		t.Fatalf("got %q, want the mpim name unchanged", got)
+	}
+}
+
+func TestSearchChannelLabel_DirectMessage(t *testing.T) {
+	resolver := newCachedResolver(t, map[string]string{"U123": "Alice Adams"})
+	ch := map[string]any{"name": "U123", "user": "U123", "is_im": true}
+	if got := searchChannelLabel(ch, resolver); got != "@Alice Adams" {
+		t.Fatalf("got %q, want %q", got, "@Alice Adams")
+	}
+}
+
+func TestSearchChannelLabel_DirectMessageUserFromName(t *testing.T) {
+	// When the channel "user" field is absent, the partner ID is taken from
+	// the channel name (which Slack sets to the partner's user ID for DMs).
+	resolver := newCachedResolver(t, map[string]string{"U999": "Bob Brown"})
+	ch := map[string]any{"name": "U999", "is_im": true}
+	if got := searchChannelLabel(ch, resolver); got != "@Bob Brown" {
+		t.Fatalf("got %q, want %q", got, "@Bob Brown")
+	}
+}
 
 func TestBuildSearchQuery_QueryOnly(t *testing.T) {
 	got := buildSearchQuery("deployment failed", "")
