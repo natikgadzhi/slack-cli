@@ -237,13 +237,19 @@ func extractSearchMatches(result map[string]any) []map[string]any {
 	return api.ExtractItems(messagesMap, "matches")
 }
 
-// renderSearchTable renders search results as a table to stdout.
+// renderSearchTable renders search results as a table to stdout. Rather than a
+// LINK column (whose long URL would be truncated), the fixed-width TIME cell is
+// rendered as an OSC-8 hyperlink to the message permalink, so it stays clickable
+// without ever being clipped.
 func renderSearchTable(results []map[string]any) {
 	t := table.New()
-	t.Header("CHANNEL", "TIME", "USER", "TEXT", "LINK")
+	t.Header("CHANNEL", "TIME", "USER", "TEXT")
 	for _, r := range results {
-		timeStr := internalOutput.FormatTS(getString(r, "ts"))
-		t.Row(getString(r, "channel"), timeStr, getString(r, "user"), truncate(getString(r, "text"), 80), getString(r, "permalink"))
+		timeCell := internalOutput.FormatTS(getString(r, "ts"))
+		if link := getString(r, "permalink"); link != "" {
+			timeCell = table.Hyperlink(link, timeCell)
+		}
+		t.Row(getString(r, "channel"), timeCell, getString(r, "user"), truncate(getString(r, "text"), 80))
 	}
 	_ = t.Flush()
 }

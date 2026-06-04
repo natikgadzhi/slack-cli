@@ -236,13 +236,20 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// renderMessagesTable renders messages as a table to stdout.
+// renderMessagesTable renders messages as a table to stdout. Instead of a LINK
+// column (whose long permalink would be truncated), the fixed-width TIME cell is
+// rendered as an OSC-8 hyperlink to the message permalink, keeping it clickable
+// without being clipped. Messages without a permalink keep a plain TIME cell.
 func renderMessagesTable(messages []formatting.Message) {
 	t := table.New()
-	t.Header("TIME", "USER", "TEXT", "LINK")
+	t.Header("TIME", "USER", "TEXT")
 	for _, msg := range messages {
 		text := truncate(msg.Text, 80)
-		t.Row(msg.Time, msg.User, text, msg.Link)
+		timeCell := msg.Time
+		if msg.Link != "" {
+			timeCell = table.Hyperlink(msg.Link, msg.Time)
+		}
+		t.Row(timeCell, msg.User, text)
 	}
 	_ = t.Flush()
 }
