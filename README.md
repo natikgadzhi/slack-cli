@@ -174,6 +174,11 @@ slack-cli channels get general -o json
 | `--until` | | End time |
 | `-n`, `--limit` | `50` | Maximum number of messages to fetch |
 
+In table output there is no separate link column; instead the TIME cell renders
+as an OSC-8 hyperlink to the message permalink, so it stays clickable in a
+capable terminal without the URL being truncated. Use `-o json` to get the raw
+permalink.
+
 ### `channels list`
 
 List channels and conversations.
@@ -225,7 +230,12 @@ slack-cli search --from U12345 --sort recent
 
 At least one of a query argument or `--from` is required.
 
-In the results, the CHANNEL column shows the conversation name. For 1:1 DM hits
+In table output there is no separate link column; instead the TIME cell renders
+as an OSC-8 hyperlink to the message permalink, so it stays clickable in a
+capable terminal without the URL being truncated. Use `-o json` to get the raw
+permalink.
+
+The CHANNEL column shows the conversation name. For 1:1 DM hits
 (which Slack reports only as the partner's user ID) it shows the other person's
 display name prefixed with `@` (e.g. `@Alice Adams`); group DMs keep their
 `mpdm-…` name.
