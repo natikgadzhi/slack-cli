@@ -198,6 +198,11 @@ slack-cli search --from U12345 --sort recent
 
 At least one of a query argument or `--from` is required.
 
+In the results, the CHANNEL column shows the conversation name. For 1:1 DM hits
+(which Slack reports only as the partner's user ID) it shows the other person's
+display name prefixed with `@` (e.g. `@Alice Adams`); group DMs keep their
+`mpdm-…` name.
+
 ### `saved`
 
 List messages saved from the Slack "Later" / saved-items view, sorted in
