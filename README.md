@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/natikgadzhi/slack-cli-auth/main/App/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Slack CLI icon" />
+</p>
+
 # slack-cli
 
 Slack read-only CLI for fetching messages, threads, and history.
@@ -22,24 +26,39 @@ Download a pre-built binary from [GitHub Releases](https://github.com/natikgadzh
 
 ## Auth
 
-Requires an `xoxc-` token and `xoxd-` cookie from an active Slack browser session.
+slack-cli talks to Slack's internal web API and needs an `xoxc-` workspace token
+and `xoxd-` session cookie from an active browser session.
 
-### macOS Keychain
+### Slack CLI Auth (recommended)
 
-Store tokens in the Keychain:
+[**Slack CLI Auth**](https://github.com/natikgadzhi/slack-cli-auth) is a small,
+signed + notarized macOS app that signs you in to Slack in a web view, captures
+the tokens automatically, and stores them in your Keychain in the layout
+slack-cli expects. SSO, 2FA, and email magic links all work.
+
+```sh
+brew install --cask natikgadzhi/taps/slack-cli-auth
+```
+
+Open the app, sign in to your workspace, and you're done — slack-cli picks up
+the tokens automatically. Verify with:
+
+```sh
+slack-cli auth check
+```
+
+### Manual setup
+
+If you prefer to set tokens by hand, grab the `xoxc` token and `xoxd` (`d`)
+cookie from your browser's devtools and store them in the Keychain:
 
 ```sh
 slack-cli auth set-xoxc xoxc-...
 slack-cli auth set-xoxd xoxd-...
 ```
 
-Verify the stored credentials:
-
-```sh
-slack-cli auth check
-```
-
-Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to the current OS user (`whoami`). Override with `SLACK_KEYCHAIN_ACCOUNT`.
+Keychain services: `slack-xoxc-token` / `slack-xoxd-token`, account defaults to
+the current OS user (`whoami`). Override with `SLACK_KEYCHAIN_ACCOUNT`.
 
 `auth set-xoxd` accepts the URL-encoded form of the xoxd cookie (with `%XX`
 escapes), the raw decoded form, or the full copied `d=xoxd-...` cookie pair.
@@ -379,6 +398,12 @@ To skip the cache for a request, pass the `--no-cache` flag:
 ```sh
 slack-cli message 'https://...' --no-cache
 ```
+
+## Contributors
+
+Thank you to everyone who has contributed to slack-cli:
+
+- [Matt Smith (@lambdamatt)](https://github.com/lambdamatt)
 
 ## Dev
 
