@@ -29,6 +29,7 @@ func init() {
 	channelsSearchCmd.Flags().IntP("limit", "n", 20, "Maximum number of results to return")
 	channelsSearchCmd.Flags().String("type", "public_channel,private_channel,mpim,im", "Comma-separated conversation types to search")
 	channelsSearchCmd.Flags().Bool("include-archived", false, "Include archived channels")
+	_ = channelsSearchCmd.RegisterFlagCompletionFunc("type", completeConversationTypes)
 	channelsCmd.AddCommand(channelsSearchCmd)
 }
 

@@ -35,6 +35,8 @@ func init() {
 	searchCmd.Flags().IntP("limit", "n", 20, "Maximum number of results")
 	searchCmd.Flags().String("from", "", "Filter messages from a specific user (handle or user ID)")
 	searchCmd.Flags().String("sort", "relevance", "Sort order: relevance or recent")
+	_ = searchCmd.RegisterFlagCompletionFunc("from", completeUserHandles)
+	_ = searchCmd.RegisterFlagCompletionFunc("sort", staticCompletion("relevance", "recent"))
 	rootCmd.AddCommand(searchCmd)
 }
 
