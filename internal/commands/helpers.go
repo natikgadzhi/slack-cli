@@ -120,6 +120,51 @@ func formatMessages(messages []map[string]any, teamURL, channelID string, hasTea
 	return formatted
 }
 
+// downloadMessageFiles downloads file attachments for all messages in the slice.
+// Files are saved to dir/<sanitized-name>, and each File's LocalPath is updated
+// with the path on disk. Errors are logged as warnings, not returned.
+func downloadMessageFiles(client *api.Client, messages []formatting.Message, dir string) {
+	for i := range messages {
+		for j := range messages[i].Files {
+			f := &messages[i].Files[j]
+			if f.URL == "" {
+				continue
+			}
+			dest := filepath.Join(dir, sanitizeFilename(f.Name))
+			if err := client.DownloadFile(f.URL, dest); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: download %s: %v\n", f.Name, err)
+				continue
+			}
+			f.LocalPath = dest
+		}
+		for j := range messages[i].Replies {
+			for k := range messages[i].Replies[j].Files {
+				f := &messages[i].Replies[j].Files[k]
+				if f.URL == "" {
+					continue
+				}
+				dest := filepath.Join(dir, sanitizeFilename(f.Name))
+				if err := client.DownloadFile(f.URL, dest); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: download %s: %v\n", f.Name, err)
+					continue
+				}
+				f.LocalPath = dest
+			}
+		}
+	}
+}
+
+// sanitizeFilename removes path separators and null bytes from a filename.
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "\x00", "")
+	if name == "" {
+		name = "unnamed"
+	}
+	return name
+}
+
 // validateDerivedDir checks that the derived directory path is safe (no path traversal)
 // and returns the cleaned absolute path.
 func validateDerivedDir(dir string) (string, error) {

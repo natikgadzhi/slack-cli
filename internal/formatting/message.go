@@ -16,8 +16,21 @@ type Message struct {
 	ReplyCount int         `json:"reply_count,omitempty"`
 	Replies    []Message   `json:"replies,omitempty"`
 	Reactions  []string    `json:"reactions,omitempty"`
+	Files      []File      `json:"files,omitempty"`
 	Attachment *Attachment `json:"attachment,omitempty"`
 	Link       string      `json:"link,omitempty"`
+}
+
+// File holds metadata about a Slack file attachment.
+type File struct {
+	ID        string `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Mimetype  string `json:"mimetype,omitempty"`
+	Filetype  string `json:"filetype,omitempty"`
+	Size      int    `json:"size,omitempty"`
+	URL       string `json:"url,omitempty"`
+	LocalPath string `json:"local_path,omitempty"`
 }
 
 // Attachment holds structured attachment data (e.g. from alert bots).
@@ -81,6 +94,18 @@ func FormatMessageWith(raw map[string]any, users UserResolver, channels ChannelR
 		}
 	}
 
+	// files: extract metadata for all file attachments.
+	if files, ok := raw["files"].([]any); ok {
+		for _, f := range files {
+			if fm, ok := f.(map[string]any); ok {
+				file := buildFile(fm)
+				if file != nil {
+					msg.Files = append(msg.Files, *file)
+				}
+			}
+		}
+	}
+
 	// attachments: process first attachment only.
 	if attachments, ok := raw["attachments"].([]any); ok && len(attachments) > 0 {
 		if att, ok := attachments[0].(map[string]any); ok {
@@ -92,6 +117,36 @@ func FormatMessageWith(raw map[string]any, users UserResolver, channels ChannelR
 	}
 
 	return msg
+}
+
+// buildFile extracts file metadata from a raw Slack file object.
+func buildFile(fm map[string]any) *File {
+	name, _ := fm["name"].(string)
+	if name == "" {
+		return nil
+	}
+	f := &File{Name: name}
+	if id, ok := fm["id"].(string); ok {
+		f.ID = id
+	}
+	if title, ok := fm["title"].(string); ok {
+		f.Title = title
+	}
+	if mimetype, ok := fm["mimetype"].(string); ok {
+		f.Mimetype = mimetype
+	}
+	if filetype, ok := fm["filetype"].(string); ok {
+		f.Filetype = filetype
+	}
+	if size, ok := toInt(fm["size"]); ok {
+		f.Size = size
+	}
+	if u, ok := fm["url_private_download"].(string); ok && u != "" {
+		f.URL = u
+	} else if u, ok := fm["url_private"].(string); ok && u != "" {
+		f.URL = u
+	}
+	return f
 }
 
 // buildAttachment extracts structured fields from a raw attachment map.

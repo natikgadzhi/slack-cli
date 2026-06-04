@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -226,6 +227,45 @@ func (c *Client) checkAuth() (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// DownloadFile fetches a Slack-hosted file URL using the client's auth
+// credentials and writes the content to destPath. Parent directories are
+// created as needed.
+func (c *Client) DownloadFile(fileURL, destPath string) error {
+	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
+	if err != nil {
+		return fmt.Errorf("creating download request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.xoxc)
+	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
+	req.Header.Set("Cookie", "d="+wireXoxd)
+	req.Header.Set("User-Agent", config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("downloading file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("download returned HTTP %d", resp.StatusCode)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("creating file: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("writing file: %w", err)
+	}
+	return nil
 }
 
 // --- helpers ---

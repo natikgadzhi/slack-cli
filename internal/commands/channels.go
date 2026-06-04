@@ -52,12 +52,16 @@ func init() {
 	channelsGetCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelsGetCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 	channelsGetCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
+	channelsGetCmd.Flags().Bool("download-files", false, "Download file attachments to disk")
+	channelsGetCmd.Flags().String("download-dir", "slack-files", "Directory for downloaded files")
 
 	// Register the same flags on the deprecated "channel" alias.
 	channelCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
 	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 	channelCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
+	channelCmd.Flags().Bool("download-files", false, "Download file attachments to disk")
+	channelCmd.Flags().String("download-dir", "slack-files", "Directory for downloaded files")
 
 	// Complete the channel name/ID argument from the user's channel list.
 	channelsGetCmd.ValidArgsFunction = completeChannelNames
@@ -208,6 +212,12 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		expandThreadReplies(client, resolver, formatted, channelID, teamURL, teamErr == nil)
 	}
 
+	// Download file attachments when requested.
+	if dl, _ := cmd.Flags().GetBool("download-files"); dl {
+		dlDir, _ := cmd.Flags().GetString("download-dir")
+		downloadMessageFiles(client, formatted, dlDir)
+	}
+
 	if output.IsJSON(format) {
 		if isPartial {
 			pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
@@ -298,7 +308,7 @@ func renderMessagesTable(messages []formatting.Message) {
 	t := table.New()
 	t.Header("TIME", "USER", "TEXT")
 	for _, msg := range messages {
-		text := truncate(msg.Text, 80)
+		text := truncate(messageTextWithFiles(msg), 80)
 		timeCell := msg.Time
 		if msg.Link != "" {
 			timeCell = table.Hyperlink(msg.Link, msg.Time)
@@ -306,7 +316,7 @@ func renderMessagesTable(messages []formatting.Message) {
 		t.Row(timeCell, msg.User, text)
 
 		for _, reply := range msg.Replies {
-			rText := truncate("↳ "+reply.Text, 80)
+			rText := truncate("↳ "+messageTextWithFiles(reply), 80)
 			rTime := reply.Time
 			if reply.Link != "" {
 				rTime = table.Hyperlink(reply.Link, reply.Time)
@@ -315,6 +325,15 @@ func renderMessagesTable(messages []formatting.Message) {
 		}
 	}
 	_ = t.Flush()
+}
+
+// messageTextWithFiles appends file indicators to the message text for table display.
+func messageTextWithFiles(msg formatting.Message) string {
+	text := msg.Text
+	for _, f := range msg.Files {
+		text += " [file: " + f.Name + "]"
+	}
+	return text
 }
 
 // truncate shortens a string to maxLen runes, appending "..." if truncated.

@@ -173,9 +173,15 @@ Fetch a single Slack message or thread by URL.
 ```sh
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' -o json
+slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' --download-files
 ```
 
-Fetches the message and all thread replies, resolves user IDs to display names, and generates permalinks.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--download-files` | `false` | Download file attachments to disk |
+| `--download-dir` | `slack-files` | Directory for downloaded files |
+
+Fetches the message and all thread replies, resolves user IDs to display names, and generates permalinks. File attachments are always listed in the output (name, type, size, URL). Use `--download-files` to save them to disk.
 
 ### `channels get`
 
@@ -194,6 +200,12 @@ slack-cli channels get general -o json
 | `--until` | | End time |
 | `-n`, `--limit` | `50` | Maximum number of messages to fetch |
 | `--with-replies` | `false` | Expand thread replies inline under each parent message |
+| `--download-files` | `false` | Download file attachments to disk |
+| `--download-dir` | `slack-files` | Directory for downloaded files |
+
+File attachments are always listed in JSON output (name, type, size, URL) and
+shown as `[file: name]` indicators in table output. Use `--download-files` to
+save them to disk; each file's `local_path` is then included in JSON output.
 
 In table output there is no separate link column; instead the TIME cell renders
 as an OSC-8 hyperlink to the message permalink, so it stays clickable in a

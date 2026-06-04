@@ -24,6 +24,8 @@ var messageCmd = &cobra.Command{
 }
 
 func init() {
+	messageCmd.Flags().Bool("download-files", false, "Download file attachments to disk")
+	messageCmd.Flags().String("download-dir", "slack-files", "Directory for downloaded files")
 	rootCmd.AddCommand(messageCmd)
 }
 
@@ -99,6 +101,12 @@ func runMessage(cmd *cobra.Command, args []string) error {
 
 	// Format and render (always as a list — single message is just len=1).
 	formatted := formatMessages(messages, teamURL, channelID, teamErr == nil)
+
+	// Download file attachments when requested.
+	if dl, _ := cmd.Flags().GetBool("download-files"); dl {
+		dlDir, _ := cmd.Flags().GetString("download-dir")
+		downloadMessageFiles(client, formatted, dlDir)
+	}
 
 	if output.IsJSON(format) {
 		if err := output.PrintJSON(formatted); err != nil {

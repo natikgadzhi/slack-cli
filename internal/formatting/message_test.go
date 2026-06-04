@@ -410,6 +410,61 @@ func TestToInt_Nil(t *testing.T) {
 	}
 }
 
+func TestFormatMessage_ExtractsFiles(t *testing.T) {
+	msg := FormatMessage(map[string]any{
+		"ts":   "1700000000.000000",
+		"text": "here is the report",
+		"files": []any{
+			map[string]any{
+				"id":                   "F1234",
+				"name":                 "report.pdf",
+				"title":                "Q4 Report",
+				"mimetype":             "application/pdf",
+				"filetype":             "pdf",
+				"size":                 float64(123456),
+				"url_private_download": "https://files.slack.com/files-pri/T1234-F1234/download/report.pdf",
+			},
+			map[string]any{
+				"id":          "F5678",
+				"name":        "screenshot.png",
+				"mimetype":    "image/png",
+				"size":        float64(45000),
+				"url_private": "https://files.slack.com/files-pri/T1234-F5678/screenshot.png",
+			},
+		},
+	})
+	if len(msg.Files) != 2 {
+		t.Fatalf("len(Files) = %d, want 2", len(msg.Files))
+	}
+	if msg.Files[0].Name != "report.pdf" {
+		t.Errorf("Files[0].Name = %q, want %q", msg.Files[0].Name, "report.pdf")
+	}
+	if msg.Files[0].Size != 123456 {
+		t.Errorf("Files[0].Size = %d, want 123456", msg.Files[0].Size)
+	}
+	if msg.Files[0].URL != "https://files.slack.com/files-pri/T1234-F1234/download/report.pdf" {
+		t.Errorf("Files[0].URL = %q", msg.Files[0].URL)
+	}
+	if msg.Files[1].Name != "screenshot.png" {
+		t.Errorf("Files[1].Name = %q", msg.Files[1].Name)
+	}
+	if msg.Files[1].URL != "https://files.slack.com/files-pri/T1234-F5678/screenshot.png" {
+		t.Errorf("Files[1].URL should fall back to url_private, got %q", msg.Files[1].URL)
+	}
+}
+
+func TestFormatMessage_SkipsFilesWithNoName(t *testing.T) {
+	msg := FormatMessage(map[string]any{
+		"ts":   "1700000000.000000",
+		"files": []any{
+			map[string]any{"id": "F0000"},
+		},
+	})
+	if len(msg.Files) != 0 {
+		t.Errorf("len(Files) = %d, want 0 for files without name", len(msg.Files))
+	}
+}
+
 func TestFormatMessage_UnescapesAttachmentEntities(t *testing.T) {
 	msg := FormatMessage(map[string]any{
 		"ts": "1700000000.000000",
