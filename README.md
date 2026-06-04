@@ -80,6 +80,33 @@ slack-cli unread --limit 50
 slack-cli users
 ```
 
+## Shell completion
+
+slack-cli ships completion scripts for bash, zsh, fish, and PowerShell via the
+`completion` subcommand:
+
+```sh
+slack-cli completion fish | source                          # current session
+slack-cli completion fish > ~/.config/fish/completions/slack-cli.fish  # persistent
+```
+
+For other shells, see `slack-cli completion <bash|zsh|powershell> --help`.
+
+Beyond the static command/flag tree, completion is **dynamic** where it helps:
+
+| Where | Completes |
+|-------|-----------|
+| `channels get <TAB>` | Channel names from your channel list |
+| `search --from <TAB>` | User handles (annotated with real names); a leading `@` is honored |
+| `channels list --type <TAB>`, `channels search --type <TAB>` | `public_channel`, `private_channel`, `mpim`, `im` |
+| `search --sort <TAB>` | `relevance`, `recent` |
+| `-o`/`--output <TAB>` | `json`, `table` |
+
+Dynamic channel/user lists are fetched from Slack on first use and cached for an
+hour under `<derived-dir>/completion/`, so a TAB press is instant after the first
+fetch. If a refresh fails (offline, rate limited, missing credentials),
+completion silently falls back to the last cached list or offers nothing.
+
 ## Global flags
 
 | Flag | Description |

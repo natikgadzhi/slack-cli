@@ -30,6 +30,7 @@ func init() {
 	channelsListCmd.Flags().IntP("limit", "n", 100, "Maximum number of channels to return")
 	channelsListCmd.Flags().String("type", "public_channel,private_channel", "Comma-separated conversation types (public_channel,private_channel,mpim,im)")
 	channelsListCmd.Flags().Bool("include-archived", false, "Include archived channels")
+	_ = channelsListCmd.RegisterFlagCompletionFunc("type", completeConversationTypes)
 	channelsCmd.AddCommand(channelsListCmd)
 }
 
