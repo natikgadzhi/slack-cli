@@ -44,6 +44,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	// Register cli-kit output flag (-o/--output with TTY auto-detection).
 	output.RegisterFlag(rootCmd)
+	_ = rootCmd.RegisterFlagCompletionFunc("output", staticCompletion("json", "table"))
 
 	// Register cli-kit derived flag (-d/--derived with env var fallback).
 	derived.RegisterFlag(rootCmd, "slack-cli")

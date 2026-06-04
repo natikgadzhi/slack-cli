@@ -56,6 +56,10 @@ func init() {
 	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 
+	// Complete the channel name/ID argument from the user's channel list.
+	channelsGetCmd.ValidArgsFunction = completeChannelNames
+	channelCmd.ValidArgsFunction = completeChannelNames
+
 	// Wire up the command tree.
 	channelsCmd.AddCommand(channelsGetCmd)
 	rootCmd.AddCommand(channelsCmd)
