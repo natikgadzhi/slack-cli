@@ -399,6 +399,12 @@ To skip the cache for a request, pass the `--no-cache` flag:
 slack-cli message 'https://...' --no-cache
 ```
 
+## Contributors
+
+Thank you to everyone who has contributed to slack-cli:
+
+- [Matt Smith (@lambdamatt)](https://github.com/lambdamatt)
+
 ## Dev
 
 ```sh
