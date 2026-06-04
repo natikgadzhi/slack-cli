@@ -14,6 +14,7 @@ type Message struct {
 	User       string      `json:"user,omitempty"`
 	Text       string      `json:"text,omitempty"`
 	ReplyCount int         `json:"reply_count,omitempty"`
+	Replies    []Message   `json:"replies,omitempty"`
 	Reactions  []string    `json:"reactions,omitempty"`
 	Attachment *Attachment `json:"attachment,omitempty"`
 	Link       string      `json:"link,omitempty"`
@@ -60,7 +61,7 @@ func FormatMessageWith(raw map[string]any, users UserResolver, channels ChannelR
 			text = ReplaceMrkdwnLinks(text, users, channels)
 			text = UnescapeEntities(text)
 			text = ReplaceEmojiShortcodes(text)
-			msg.Text = TruncateRunes(text, 500)
+			msg.Text = text
 		}
 	}
 
@@ -111,7 +112,6 @@ func buildAttachment(att map[string]any) *Attachment {
 		text = fb
 	}
 	text = UnescapeEntities(strings.TrimSpace(text))
-	text = TruncateRunes(text, 300)
 	if text != "" {
 		a.Text = text
 		empty = false
@@ -165,15 +165,6 @@ func BuildPermalink(teamURL, channelID, ts string) string {
 	base := strings.TrimRight(teamURL, "/")
 	tsCompact := strings.ReplaceAll(ts, ".", "")
 	return fmt.Sprintf("%s/archives/%s/p%s", base, channelID, tsCompact)
-}
-
-// TruncateRunes truncates s to at most maxRunes runes. No suffix is added.
-func TruncateRunes(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes])
 }
 
 // toInt converts an any value to int, handling both float64 (JSON default) and int.

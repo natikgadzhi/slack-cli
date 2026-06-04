@@ -16,6 +16,7 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
 	"github.com/natikgadzhi/slack-cli/internal/formatting"
+	"github.com/natikgadzhi/slack-cli/internal/users"
 )
 
 // channelsCmd is the parent command for channel-related subcommands.
@@ -50,11 +51,13 @@ func init() {
 	channelsGetCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
 	channelsGetCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelsGetCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
+	channelsGetCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
 
 	// Register the same flags on the deprecated "channel" alias.
 	channelCmd.Flags().String("since", "", "Start time (e.g. 2d, 2026-03-01)")
 	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
+	channelCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
 
 	// Complete the channel name/ID argument from the user's channel list.
 	channelsGetCmd.ValidArgsFunction = completeChannelNames
@@ -199,6 +202,12 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	// Format and render.
 	formatted := formatMessages(allMessages, teamURL, channelID, teamErr == nil)
 
+	// Expand thread replies when requested.
+	withReplies, _ := cmd.Flags().GetBool("with-replies")
+	if withReplies {
+		expandThreadReplies(client, resolver, formatted, channelID, teamURL, teamErr == nil)
+	}
+
 	if output.IsJSON(format) {
 		if isPartial {
 			pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
@@ -240,10 +249,51 @@ func runChannel(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// expandThreadReplies fetches thread replies for each message with ReplyCount > 0
+// and populates the Replies field. The parent message itself is excluded from replies.
+func expandThreadReplies(client *api.Client, resolver *users.UserResolver, messages []formatting.Message, channelID, teamURL string, hasTeamURL bool) {
+	for i := range messages {
+		if messages[i].ReplyCount == 0 || messages[i].TS == "" {
+			continue
+		}
+		result, err := client.Call("conversations.replies", map[string]string{
+			"channel": channelID,
+			"ts":      messages[i].TS,
+			"limit":   "200",
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: fetching replies for %s: %v\n", messages[i].TS, err)
+			continue
+		}
+		rawReplies := api.ExtractItems(result, "messages")
+		if len(rawReplies) <= 1 {
+			continue
+		}
+		// Skip the first element (the parent message itself).
+		rawReplies = rawReplies[1:]
+
+		rawReplies, _ = resolver.ResolveUsers(rawReplies)
+
+		replies := make([]formatting.Message, 0, len(rawReplies))
+		for _, r := range rawReplies {
+			msg := formatting.FormatMessage(r)
+			if hasTeamURL {
+				if ts, ok := r["ts"].(string); ok && ts != "" {
+					msg.Link = formatting.BuildPermalink(teamURL, channelID, ts)
+				}
+			}
+			replies = append(replies, msg)
+		}
+		messages[i].Replies = replies
+	}
+}
+
 // renderMessagesTable renders messages as a table to stdout. Instead of a LINK
 // column (whose long permalink would be truncated), the fixed-width TIME cell is
 // rendered as an OSC-8 hyperlink to the message permalink, keeping it clickable
 // without being clipped. Messages without a permalink keep a plain TIME cell.
+// Thread replies (when expanded via --with-replies) are rendered with a "↳"
+// prefix on their text.
 func renderMessagesTable(messages []formatting.Message) {
 	t := table.New()
 	t.Header("TIME", "USER", "TEXT")
@@ -254,6 +304,15 @@ func renderMessagesTable(messages []formatting.Message) {
 			timeCell = table.Hyperlink(msg.Link, msg.Time)
 		}
 		t.Row(timeCell, msg.User, text)
+
+		for _, reply := range msg.Replies {
+			rText := truncate("↳ "+reply.Text, 80)
+			rTime := reply.Time
+			if reply.Link != "" {
+				rTime = table.Hyperlink(reply.Link, reply.Time)
+			}
+			t.Row(rTime, reply.User, rText)
+		}
 	}
 	_ = t.Flush()
 }

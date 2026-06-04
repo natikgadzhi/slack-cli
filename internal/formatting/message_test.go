@@ -25,28 +25,26 @@ func TestFormatMessage_Basic(t *testing.T) {
 	}
 }
 
-func TestFormatMessage_TruncatesLongText(t *testing.T) {
+func TestFormatMessage_PreservesLongText(t *testing.T) {
 	longText := strings.Repeat("x", 600)
 	msg := FormatMessage(map[string]any{
 		"ts":   "1741234567.000000",
 		"text": longText,
 	})
-	if len([]rune(msg.Text)) != 500 {
-		t.Errorf("len(runes(Text)) = %d, want 500", len([]rune(msg.Text)))
+	if len([]rune(msg.Text)) != 600 {
+		t.Errorf("len(runes(Text)) = %d, want 600 (no truncation)", len([]rune(msg.Text)))
 	}
 }
 
-func TestFormatMessage_TruncatesMultibyteText(t *testing.T) {
-	// Use a multi-byte character (3 bytes in UTF-8) repeated beyond the limit.
+func TestFormatMessage_PreservesMultibyteText(t *testing.T) {
 	longText := strings.Repeat("\u4e16", 600) // 600 runes, each 3 bytes
 	msg := FormatMessage(map[string]any{
 		"ts":   "1741234567.000000",
 		"text": longText,
 	})
-	if len([]rune(msg.Text)) != 500 {
-		t.Errorf("len(runes(Text)) = %d, want 500", len([]rune(msg.Text)))
+	if len([]rune(msg.Text)) != 600 {
+		t.Errorf("len(runes(Text)) = %d, want 600 (no truncation)", len([]rune(msg.Text)))
 	}
-	// Ensure no broken UTF-8 sequences.
 	for i, r := range msg.Text {
 		if r == '\uFFFD' {
 			t.Errorf("replacement character at byte %d — truncation broke a rune", i)
@@ -184,7 +182,7 @@ func TestFormatMessage_EmptyMap(t *testing.T) {
 	}
 }
 
-func TestFormatMessage_TextExactly500Runes(t *testing.T) {
+func TestFormatMessage_TextExactly500RunesPreserved(t *testing.T) {
 	text := strings.Repeat("a", 500)
 	msg := FormatMessage(map[string]any{
 		"ts":   "1741234567.000000",
@@ -275,7 +273,7 @@ func TestFormatMessage_EmptyAttachment(t *testing.T) {
 	}
 }
 
-func TestFormatMessage_AttachmentTextTruncated(t *testing.T) {
+func TestFormatMessage_AttachmentTextPreserved(t *testing.T) {
 	longText := strings.Repeat("y", 400)
 	msg := FormatMessage(map[string]any{
 		"ts": "1741234567.000000",
@@ -286,8 +284,8 @@ func TestFormatMessage_AttachmentTextTruncated(t *testing.T) {
 	if msg.Attachment == nil {
 		t.Fatal("Attachment should not be nil")
 	}
-	if len([]rune(msg.Attachment.Text)) != 300 {
-		t.Errorf("Attachment.Text rune length = %d, want 300 (truncated)", len([]rune(msg.Attachment.Text)))
+	if len([]rune(msg.Attachment.Text)) != 400 {
+		t.Errorf("Attachment.Text rune length = %d, want 400 (no truncation)", len([]rune(msg.Attachment.Text)))
 	}
 }
 

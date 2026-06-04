@@ -531,7 +531,7 @@ func savedRowText(m formatting.Message) string {
 	if m.Attachment.Text != "" {
 		parts = append(parts, m.Attachment.Text)
 	}
-	return formatting.TruncateRunes(strings.Join(parts, " — "), 500)
+	return strings.Join(parts, " — ")
 }
 
 // renderSavedTable writes the saved rows to stdout as a bordered table. The

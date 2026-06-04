@@ -134,7 +134,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 		if text, ok := m["text"].(string); ok {
 			text = formatting.UnescapeEntities(strings.TrimSpace(text))
-			r["text"] = formatting.TruncateRunes(text, 500)
+			r["text"] = text
 		}
 
 		if permalink, ok := m["permalink"].(string); ok {

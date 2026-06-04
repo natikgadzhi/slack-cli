@@ -184,6 +184,7 @@ Fetch messages from a Slack channel by name or ID.
 ```sh
 slack-cli channels get general --since 2d --limit 100
 slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
+slack-cli channels get general --with-replies
 slack-cli channels get general -o json
 ```
 
@@ -192,11 +193,13 @@ slack-cli channels get general -o json
 | `--since` | | Start time (relative like `2d`, or absolute like `2026-03-01`) |
 | `--until` | | End time |
 | `-n`, `--limit` | `50` | Maximum number of messages to fetch |
+| `--with-replies` | `false` | Expand thread replies inline under each parent message |
 
 In table output there is no separate link column; instead the TIME cell renders
 as an OSC-8 hyperlink to the message permalink, so it stays clickable in a
 capable terminal without the URL being truncated. Use `-o json` to get the raw
-permalink.
+permalink. When `--with-replies` is set, thread replies appear after their parent
+with a `↳` prefix in table output and nested under `"replies"` in JSON.
 
 ### `channels list`
 
