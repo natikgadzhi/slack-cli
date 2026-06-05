@@ -374,6 +374,7 @@ Search Slack messages.
 slack-cli search "deployment failed" --limit 10
 slack-cli search --from alice "deployment"
 slack-cli search --from U12345 --sort recent
+slack-cli search "deployment failed" --context 3
 ```
 
 | Flag | Default | Description |
@@ -381,8 +382,17 @@ slack-cli search --from U12345 --sort recent
 | `-n`, `--limit` | `20` | Maximum number of results |
 | `--from` | | Filter by user (handle or user ID) |
 | `--sort` | `relevance` | Sort order: `relevance` or `recent` |
+| `-C`, `--context` | `0` | Number of surrounding messages to fetch for each hit |
 
 At least one of a query argument or `--from` is required.
+
+When `--context N` is set (N > 0), each search hit is enriched with up to N
+messages before and after it from the same channel. In table output, context
+messages are prefixed with `|` and the hit itself with `>`, with blank lines
+separating groups. In JSON output, each result gains `context_before` and
+`context_after` arrays of `{ts, user, text}` objects. Context fetching makes
+additional API calls (two per hit); if a call is rate-limited, the hit is shown
+without context and a warning is printed.
 
 In table output there is no separate link column; instead the TIME cell renders
 as an OSC-8 hyperlink to the message permalink, so it stays clickable in a
