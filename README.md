@@ -95,6 +95,7 @@ slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels members general
 slack-cli channels search eng
+slack-cli emojis search fire
 slack-cli files read F12345678
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
@@ -280,6 +281,25 @@ slack-cli channels search infra --include-archived
 | `-n`, `--limit` | `20` | Maximum number of results |
 | `--type` | `public_channel,private_channel,mpim,im` | Conversation types to search |
 | `--include-archived` | `false` | Include archived channels |
+
+### `emojis search`
+
+Search custom workspace emojis by name (case-insensitive substring match).
+
+```sh
+slack-cli emojis search fire
+slack-cli emojis search party --limit 10
+slack-cli emojis search logo -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `50` | Maximum number of results |
+
+Table output columns: NAME (with colons for copy-paste, e.g. `:fire:`), TYPE
+(`custom` or `alias`), VALUE (image URL for custom emojis, target name like
+`:flames:` for aliases). JSON output returns an array of objects with `name`,
+`type`, and `value` fields.
 
 ### `files read`
 
