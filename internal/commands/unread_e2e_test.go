@@ -322,6 +322,7 @@ func TestUnread_E2E_WithFlags(t *testing.T) {
 	}
 	if reaction == nil {
 		t.Fatalf("no reaction row\n%s", asJSON)
+		return
 	}
 	if !strings.Contains(reaction.Text, "👍") || !strings.Contains(reaction.Text, "from @Alice") || !strings.Contains(reaction.Text, "shipped") {
 		t.Errorf("reaction text = %q", reaction.Text)
@@ -329,6 +330,7 @@ func TestUnread_E2E_WithFlags(t *testing.T) {
 
 	if app == nil {
 		t.Fatalf("no app row\n%s", asJSON)
+		return
 	}
 	if app.Conversation != "@deploybot" {
 		t.Errorf("app conversation = %q, want @deploybot", app.Conversation)

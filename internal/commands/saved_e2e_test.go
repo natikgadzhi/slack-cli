@@ -212,6 +212,7 @@ func TestSaved_E2E(t *testing.T) {
 	publicRow := findRowByConversation(rows, "eng")
 	if publicRow == nil {
 		t.Fatalf("no public-channel row\n%s", asJSON)
+		return
 	}
 	if !strings.Contains(publicRow.Text, "🧵") {
 		t.Errorf("public text missing emoji: %q", publicRow.Text)
