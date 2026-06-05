@@ -23,7 +23,11 @@ var canvasesCmd = &cobra.Command{
 var canvasesReadCmd = &cobra.Command{
 	Use:   "read <canvas-id>",
 	Short: "Fetch and display a Slack canvas",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a canvas ID",
+		"slack-cli canvases read <canvas-id>",
+		"slack-cli canvases read F12345678",
+	),
 	Example: `  slack-cli canvases read F12345678
   slack-cli canvases read F12345678 -o json`,
 	RunE: runCanvasesRead,

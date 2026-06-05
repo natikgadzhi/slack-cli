@@ -39,7 +39,11 @@ var filesCmd = &cobra.Command{
 var filesReadCmd = &cobra.Command{
 	Use:   "read <file-id>",
 	Short: "Read a Slack file's metadata and content",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a file ID",
+		"slack-cli files read <file-id>",
+		"slack-cli files read F12345678",
+	),
 	Example: `  slack-cli files read F12345678
   slack-cli files read F12345678 -o json
   slack-cli files read F12345678 --download

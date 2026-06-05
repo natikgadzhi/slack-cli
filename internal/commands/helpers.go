@@ -378,6 +378,30 @@ func extractStringSlice(result map[string]any, key string) []string { //nolint:u
 	return strs
 }
 
+// --- Argument validation helpers ---
+
+// exactlyOneArg returns a cobra.PositionalArgs validator that produces a
+// helpful error message (with usage and examples) when the user passes zero
+// arguments, and a concise "too many arguments" message otherwise.
+func exactlyOneArg(noun, usage string, examples ...string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			msg := fmt.Sprintf("%s requires %s\n\nUsage:\n  %s", cmd.CommandPath(), noun, usage)
+			if len(examples) > 0 {
+				msg += "\n\nExamples:"
+				for _, ex := range examples {
+					msg += "\n  " + ex
+				}
+			}
+			return fmt.Errorf("%s", msg)
+		}
+		if len(args) > 1 {
+			return fmt.Errorf("%s accepts 1 argument, got %d", cmd.CommandPath(), len(args))
+		}
+		return nil
+	}
+}
+
 // --- Shared input-parsing helpers ---
 
 // parseMessageInput resolves a channel ID and message timestamp from either a

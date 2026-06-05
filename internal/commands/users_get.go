@@ -18,7 +18,12 @@ import (
 var usersGetCmd = &cobra.Command{
 	Use:   "get <handle|id>",
 	Short: "Get a user's profile",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a user handle or ID",
+		"slack-cli users get <handle|id>",
+		"slack-cli users get alice",
+		"slack-cli users get U12345678",
+	),
 	Example: `  slack-cli users get alice
   slack-cli users get U12345678
   slack-cli users get @alice

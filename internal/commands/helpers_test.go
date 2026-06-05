@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/natikgadzhi/slack-cli/internal/cache"
+	"github.com/spf13/cobra"
 )
 
 func TestFormatMessages_Empty(t *testing.T) {
@@ -300,5 +302,84 @@ func TestExtractStringSlice_MixedTypes(t *testing.T) {
 		if v != want[i] {
 			t.Errorf("extractStringSlice()[%d] = %q, want %q", i, v, want[i])
 		}
+	}
+}
+
+func TestExactlyOneArg_ZeroArgs(t *testing.T) {
+	validator := exactlyOneArg(
+		"a channel name or ID",
+		"slack-cli channels get <name|id> [flags]",
+		"slack-cli channels get general --since 2d",
+		"slack-cli channels get C12345678",
+	)
+
+	// Simulate a command with CommandPath "slack-cli channels get".
+	cmd := &cobra.Command{Use: "get"}
+	parent := &cobra.Command{Use: "channels"}
+	root := &cobra.Command{Use: "slack-cli"}
+	root.AddCommand(parent)
+	parent.AddCommand(cmd)
+
+	err := validator(cmd, []string{})
+	if err == nil {
+		t.Fatal("expected error for zero args, got nil")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "requires a channel name or ID") {
+		t.Errorf("error should mention what's required, got: %s", msg)
+	}
+	if !strings.Contains(msg, "Usage:") {
+		t.Errorf("error should include usage, got: %s", msg)
+	}
+	if !strings.Contains(msg, "Examples:") {
+		t.Errorf("error should include examples, got: %s", msg)
+	}
+	if !strings.Contains(msg, "slack-cli channels get general --since 2d") {
+		t.Errorf("error should include the example, got: %s", msg)
+	}
+}
+
+func TestExactlyOneArg_OneArg(t *testing.T) {
+	validator := exactlyOneArg("a query", "slack-cli search <query>")
+
+	cmd := &cobra.Command{Use: "search"}
+	err := validator(cmd, []string{"hello"})
+	if err != nil {
+		t.Errorf("expected no error for one arg, got: %v", err)
+	}
+}
+
+func TestExactlyOneArg_TooManyArgs(t *testing.T) {
+	validator := exactlyOneArg("a query", "slack-cli search <query>")
+
+	cmd := &cobra.Command{Use: "search"}
+	root := &cobra.Command{Use: "slack-cli"}
+	root.AddCommand(cmd)
+
+	err := validator(cmd, []string{"hello", "world"})
+	if err == nil {
+		t.Fatal("expected error for two args, got nil")
+	}
+	if !strings.Contains(err.Error(), "accepts 1 argument, got 2") {
+		t.Errorf("unexpected error message: %s", err.Error())
+	}
+}
+
+func TestExactlyOneArg_NoExamples(t *testing.T) {
+	validator := exactlyOneArg("a thing", "slack-cli do <thing>")
+
+	cmd := &cobra.Command{Use: "do"}
+	root := &cobra.Command{Use: "slack-cli"}
+	root.AddCommand(cmd)
+
+	err := validator(cmd, []string{})
+	if err == nil {
+		t.Fatal("expected error for zero args, got nil")
+	}
+
+	msg := err.Error()
+	if strings.Contains(msg, "Examples:") {
+		t.Errorf("should not include Examples section when none provided, got: %s", msg)
 	}
 }

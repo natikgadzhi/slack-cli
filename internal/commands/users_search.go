@@ -17,7 +17,11 @@ import (
 var usersSearchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search users by name or handle",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a search query",
+		"slack-cli users search <query>",
+		"slack-cli users search alice",
+	),
 	Example: `  slack-cli users search alice
   slack-cli users search "alice smith"
   slack-cli users search alice --limit 10
