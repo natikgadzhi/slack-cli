@@ -129,9 +129,13 @@ func TestLooksLikeUserID(t *testing.T) {
 		{"U12345678", true},
 		{"U12345ABC", true},
 		{"UABC", true},
+		{"W12345678", true}, // enterprise grid user ID
+		{"WABC", true},      // enterprise grid user ID
 		{"alice", false},
 		{"U", false},         // too short
+		{"W", false},         // too short
 		{"u12345678", false}, // lowercase u
+		{"w12345678", false}, // lowercase w
 		{"U123-456", false},  // contains non-alphanumeric
 		{"", false},
 	}

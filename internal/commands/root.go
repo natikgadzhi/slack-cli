@@ -38,7 +38,9 @@ var rootCmd = &cobra.Command{
   slack-cli search "deployment failed" --limit 10
   slack-cli search "from:@alice" -o json | jq '.[] | .text'
   slack-cli unread --limit 50
-  slack-cli users --limit 50`,
+  slack-cli users list --limit 50
+  slack-cli users get alice
+  slack-cli users search "alice"`,
 }
 
 func init() {
