@@ -107,6 +107,99 @@ slack-cli users get alice
 slack-cli users search "alice"
 ```
 
+## Usage scenarios
+
+### Catch up on what you missed
+
+```sh
+# What needs my attention right now?
+slack-cli unread
+
+# What did people save for me to look at?
+slack-cli saved --limit 20
+
+# What happened in #engineering today?
+slack-cli channels get engineering --since 1d
+```
+
+### Find and read messages
+
+```sh
+# Search for a topic across all channels
+slack-cli search "deployment failed" --limit 10
+
+# Search with surrounding context (3 messages before and after each hit)
+slack-cli search "deployment failed" --context 3
+
+# Search messages from a specific person
+slack-cli search --from alice "API outage" --sort recent
+
+# Read a specific thread by URL
+slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+
+# Read a thread by channel + timestamp (useful from scripts or other tools)
+slack-cli message --channel general --ts 1741234567.123456
+```
+
+### Explore channels and people
+
+```sh
+# Find channels by name
+slack-cli channels search infra
+
+# List all channels (including DMs and group chats)
+slack-cli channels list --type public_channel,private_channel,mpim,im
+
+# Who's in a channel?
+slack-cli channels members engineering
+
+# Look up someone's full profile
+slack-cli users get alice
+
+# Find people by name or email
+slack-cli users search "product manager"
+```
+
+### Work with files and content
+
+```sh
+# Read a text file inline (code snippets, configs, logs)
+slack-cli files read F12345678
+
+# Download a file to disk
+slack-cli files read F12345678 --download --download-dir ./downloads
+
+# Read a Slack canvas document
+slack-cli canvases read F12345678
+```
+
+### Reactions and emojis
+
+```sh
+# See who reacted to a message
+slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+slack-cli reactions get --channel general --ts 1741234567.123456
+
+# Find custom workspace emojis
+slack-cli emojis search party
+```
+
+### Pipe and script
+
+```sh
+# Export channel history as JSON for processing
+slack-cli channels get general --since 7d -o json | jq '.[] | .text'
+
+# Get all messages from a user in JSON
+slack-cli search --from alice -o json > alice-messages.json
+
+# List user emails for a channel
+slack-cli channels members engineering -o json | jq '.[].email'
+
+# Feed search results to another tool
+slack-cli search "action item" --context 2 -o json | jq '.[] | select(.context_before)'
+```
+
 ## Shell completion
 
 slack-cli ships completion scripts for bash, zsh, fish, and PowerShell via the
