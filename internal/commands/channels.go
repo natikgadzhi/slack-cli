@@ -29,7 +29,12 @@ var channelsCmd = &cobra.Command{
 var channelsGetCmd = &cobra.Command{
 	Use:   "get <name|id>",
 	Short: "Fetch messages from a Slack channel",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a channel name or ID",
+		"slack-cli channels get <name|id> [flags]",
+		"slack-cli channels get general --since 2d",
+		"slack-cli channels get C12345678",
+	),
 	Example: `  slack-cli channels get general --since 2d --limit 100
   slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
   slack-cli channels get general -o json | jq '.[].text'`,
@@ -42,7 +47,12 @@ var channelCmd = &cobra.Command{
 	Short:      "Fetch messages from a Slack channel",
 	Hidden:     true,
 	Deprecated: "use 'channels get' instead",
-	Args:       cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a channel name or ID",
+		"slack-cli channels get <name|id> [flags]",
+		"slack-cli channels get general --since 2d",
+		"slack-cli channels get C12345678",
+	),
 	RunE:       runChannel,
 }
 

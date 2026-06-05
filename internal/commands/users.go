@@ -15,18 +15,12 @@ import (
 )
 
 // usersCmd is the parent command for user-related subcommands.
-// When invoked without a subcommand, it delegates to "users list" for
-// backward compatibility.
 var usersCmd = &cobra.Command{
 	Use:   "users",
 	Short: "Manage and view workspace users",
-	Example: `  slack-cli users
-  slack-cli users list --limit 50
+	Example: `  slack-cli users list --limit 50
   slack-cli users get alice
   slack-cli users search "alice"`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runUsersList(cmd, args)
-	},
 }
 
 // usersListCmd lists workspace members.

@@ -24,7 +24,11 @@ var emojisCmd = &cobra.Command{
 var emojisSearchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search custom emojis by name",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a search query",
+		"slack-cli emojis search <query>",
+		"slack-cli emojis search fire",
+	),
 	Example: `  slack-cli emojis search fire
   slack-cli emojis search party --limit 10
   slack-cli emojis search logo -o json`,

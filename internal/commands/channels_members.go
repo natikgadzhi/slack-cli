@@ -18,7 +18,11 @@ import (
 var channelsMembersCmd = &cobra.Command{
 	Use:   "members <name|id>",
 	Short: "List members of a channel",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a channel name or ID",
+		"slack-cli channels members <name|id>",
+		"slack-cli channels members general",
+	),
 	Example: `  slack-cli channels members general
   slack-cli channels members C12345678
   slack-cli channels members general --limit 50

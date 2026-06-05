@@ -18,7 +18,11 @@ import (
 var channelsSearchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search channels by name",
-	Args:  cobra.ExactArgs(1),
+	Args: exactlyOneArg(
+		"a search query",
+		"slack-cli channels search <query>",
+		"slack-cli channels search eng",
+	),
 	Example: `  slack-cli channels search eng
   slack-cli channels search "product" --type public_channel,private_channel,mpim,im
   slack-cli channels search infra --include-archived`,
