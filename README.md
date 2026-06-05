@@ -95,6 +95,7 @@ slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels members general
 slack-cli channels search eng
+slack-cli canvases read F12345678
 slack-cli emojis search fire
 slack-cli files read F12345678
 slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
@@ -306,6 +307,21 @@ slack-cli channels search infra --include-archived
 | `-n`, `--limit` | `20` | Maximum number of results |
 | `--type` | `public_channel,private_channel,mpim,im` | Conversation types to search |
 | `--include-archived` | `false` | Include archived channels |
+
+### `canvases read`
+
+Fetch and display a Slack canvas (document) by its ID.
+
+```sh
+slack-cli canvases read F12345678
+slack-cli canvases read F12345678 -o json
+```
+
+Canvas IDs start with `F` and can be found in canvas URLs or via the Slack API.
+In table/text output the canvas content is rendered as simplified markdown
+(headings, paragraphs, lists, code blocks, blockquotes, links, checklists). In
+JSON output the full API response is returned, including the raw document
+structure.
 
 ### `emojis search`
 
