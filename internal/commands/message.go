@@ -13,7 +13,6 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
-	"github.com/natikgadzhi/slack-cli/internal/formatting"
 )
 
 var messageCmd = &cobra.Command{
@@ -38,26 +37,6 @@ func init() {
 	rootCmd.AddCommand(messageCmd)
 }
 
-// validateMessageArgs checks that exactly one input mode is used: either a
-// positional URL or the --channel + --ts flag pair. It returns an error
-// describing the conflict when the caller gets it wrong.
-func validateMessageArgs(args []string, channelFlag, tsFlag string) error {
-	hasURL := len(args) == 1
-	hasChannel := channelFlag != ""
-	hasTS := tsFlag != ""
-
-	if hasURL && (hasChannel || hasTS) {
-		return fmt.Errorf("cannot combine a positional URL with --channel/--ts flags")
-	}
-	if hasChannel != hasTS {
-		return fmt.Errorf("--channel and --ts must be provided together")
-	}
-	if !hasURL && !hasChannel {
-		return fmt.Errorf("provide either a message URL or --channel and --ts")
-	}
-	return nil
-}
-
 // runMessage fetches a single Slack message or thread by URL (positional arg)
 // or by --channel + --ts flags, resolves users, formats the output, and
 // optionally caches the result.
@@ -65,50 +44,35 @@ func runMessage(cmd *cobra.Command, args []string) error {
 	channelFlag, _ := cmd.Flags().GetString("channel")
 	tsFlag, _ := cmd.Flags().GetString("ts")
 
-	if err := validateMessageArgs(args, channelFlag, tsFlag); err != nil {
+	channelID, fetchTS, err := parseMessageInput(args, channelFlag, tsFlag)
+	if err != nil {
 		return err
 	}
 
 	format := output.Resolve(cmd)
 
-	var channelID, fetchTS, rawURL string
-
+	var rawURL string
 	if len(args) == 1 {
-		// URL mode: parse the Slack URL.
 		rawURL = args[0]
-		cid, messageTS, threadTS, err := formatting.ParseSlackURL(rawURL)
-		if err != nil {
-			return fmt.Errorf("parsing URL: %w", err)
-		}
-		channelID = cid
-		fetchTS = messageTS
-		if threadTS != "" {
-			fetchTS = threadTS
-		}
-	} else {
-		// Flag mode: resolve channel name → ID, use --ts directly.
-		client, _, err := setupClient()
-		if err != nil {
-			return err
-		}
-
-		debug, _ := cmd.Flags().GetBool("debug")
-		var progressWriter io.Writer
-		if !output.IsJSON(format) {
-			progressWriter = os.Stderr
-		}
-		cid, err := channels.ResolveChannel(client, channelFlag, progressWriter, debug)
-		if err != nil {
-			return fmt.Errorf("resolving channel: %w", err)
-		}
-		channelID = cid
-		fetchTS = tsFlag
 	}
 
 	// Set up client and user resolver.
 	client, resolver, err := setupClient()
 	if err != nil {
 		return err
+	}
+
+	// If --channel was a name rather than an ID, resolve it now.
+	if channelFlag != "" {
+		debug, _ := cmd.Flags().GetBool("debug")
+		var progressWriter io.Writer
+		if !output.IsJSON(format) {
+			progressWriter = os.Stderr
+		}
+		channelID, err = channels.ResolveChannel(client, channelID, progressWriter, debug)
+		if err != nil {
+			return fmt.Errorf("resolving channel: %w", err)
+		}
 	}
 
 	// Start team URL fetch concurrently — it's independent of the message fetch.

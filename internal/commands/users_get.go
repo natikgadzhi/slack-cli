@@ -8,7 +8,6 @@ import (
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
-	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
@@ -177,37 +176,26 @@ func getProfileString(profile map[string]any, key string) string {
 	return getString(profile, key)
 }
 
+// userProfileFields defines the display order for user profile key-value tables.
+var userProfileFields = []kvField{
+	{"id", "ID"},
+	{"name", "Name"},
+	{"real_name", "Real Name"},
+	{"display_name", "Display Name"},
+	{"email", "Email"},
+	{"title", "Title"},
+	{"status_text", "Status"},
+	{"status_emoji", "Status Emoji"},
+	{"timezone", "Timezone"},
+	{"phone", "Phone"},
+	{"is_admin", "Admin"},
+	{"is_owner", "Owner"},
+	{"is_bot", "Bot"},
+	{"deleted", "Deactivated"},
+}
+
 // renderUserProfileTable renders a single user's profile as a two-column
 // key-value table.
 func renderUserProfileTable(profile map[string]any) {
-	t := table.New()
-	t.Header("KEY", "VALUE")
-
-	// Display fields in a logical order.
-	fields := []struct {
-		key   string
-		label string
-	}{
-		{"id", "ID"},
-		{"name", "Name"},
-		{"real_name", "Real Name"},
-		{"display_name", "Display Name"},
-		{"email", "Email"},
-		{"title", "Title"},
-		{"status_text", "Status"},
-		{"status_emoji", "Status Emoji"},
-		{"timezone", "Timezone"},
-		{"phone", "Phone"},
-		{"is_admin", "Admin"},
-		{"is_owner", "Owner"},
-		{"is_bot", "Bot"},
-		{"deleted", "Deactivated"},
-	}
-
-	for _, f := range fields {
-		val := profile[f.key]
-		t.Row(f.label, fmt.Sprintf("%v", val))
-	}
-
-	_ = t.Flush()
+	renderKeyValueTable(profile, userProfileFields)
 }

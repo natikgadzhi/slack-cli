@@ -153,23 +153,4 @@ func TestGetProfileString(t *testing.T) {
 	}
 }
 
-func TestGetBool(t *testing.T) {
-	m := map[string]any{
-		"is_admin": true,
-		"is_owner": false,
-		"name":     "alice", // not a bool
-	}
-
-	if got := getBool(m, "is_admin"); got != true {
-		t.Errorf("getBool(m, is_admin) = %v, want true", got)
-	}
-	if got := getBool(m, "is_owner"); got != false {
-		t.Errorf("getBool(m, is_owner) = %v, want false", got)
-	}
-	if got := getBool(m, "name"); got != false {
-		t.Errorf("getBool(m, name) = %v, want false for non-bool", got)
-	}
-	if got := getBool(m, "missing"); got != false {
-		t.Errorf("getBool(m, missing) = %v, want false for missing key", got)
-	}
-}
+// getBool tests live in helpers_test.go since the function is now in helpers.go.
