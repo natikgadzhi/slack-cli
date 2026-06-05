@@ -90,6 +90,7 @@ Environment variables take precedence over Keychain values.
 slack-cli --help
 slack-cli auth check
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+slack-cli message --channel general --ts 1741234567.123456
 slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels members general
@@ -118,7 +119,7 @@ Beyond the static command/flag tree, completion is **dynamic** where it helps:
 
 | Where | Completes |
 |-------|-----------|
-| `channels get <TAB>`, `channels members <TAB>` | Channel names from your channel list |
+| `channels get <TAB>`, `channels members <TAB>`, `message --channel <TAB>` | Channel names from your channel list |
 | `users get <TAB>` | User handles (annotated with real names) |
 | `search --from <TAB>` | User handles (annotated with real names); a leading `@` is honored |
 | `channels list --type <TAB>`, `channels search --type <TAB>` | `public_channel`, `private_channel`, `mpim`, `im` |
@@ -172,18 +173,27 @@ slack-cli auth set-xoxd xoxd-...
 
 ### `message`
 
-Fetch a single Slack message or thread by URL.
+Fetch a single Slack message or thread by URL, or by channel and timestamp.
 
 ```sh
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' -o json
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456' --download-files
+slack-cli message --channel general --ts 1741234567.123456
+slack-cli message --channel C12345 --ts 1741234567.123456 -o json
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--channel` | | Channel name or ID (use with `--ts` instead of a URL) |
+| `--ts` | | Message timestamp (use with `--channel` instead of a URL) |
 | `--download-files` | `false` | Download file attachments to disk |
 | `--download-dir` | `slack-files` | Directory for downloaded files |
+
+You can identify the message either by its full Slack URL (positional argument)
+or by passing `--channel` and `--ts` together. The two modes are mutually
+exclusive -- providing both a URL and the flags is an error, as is providing only
+one of `--channel` or `--ts`.
 
 Fetches the message and all thread replies, resolves user IDs to display names, and generates permalinks. File attachments are always listed in the output (name, type, size, URL). Use `--download-files` to save them to disk.
 
