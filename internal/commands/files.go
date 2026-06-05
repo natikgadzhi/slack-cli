@@ -16,6 +16,19 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 
+// fileInfoFields defines the standard metadata fields for file info tables.
+var fileInfoFields = []kvField{
+	{"id", "ID"},
+	{"name", "Name"},
+	{"title", "Title"},
+	{"mimetype", "Type"},
+	{"filetype", "File Type"},
+	{"mode", "Mode"},
+	{"user", "User"},
+	{"created", "Created"},
+	{"channels", "Channels"},
+}
+
 // filesCmd is the parent command for file-related subcommands.
 var filesCmd = &cobra.Command{
 	Use:   "files",
@@ -128,18 +141,6 @@ func extractFileInfo(file map[string]any) map[string]any {
 	}
 
 	return info
-}
-
-// toFloat converts an any value to float64, handling float64 and int.
-func toFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case int:
-		return float64(n), true
-	default:
-		return 0, false
-	}
 }
 
 // formatSize formats a file size in bytes to a human-readable string.
@@ -255,31 +256,19 @@ func runFilesRead(cmd *cobra.Command, args []string) error {
 }
 
 // renderFileInfoTable renders file metadata as a two-column key-value table.
+// Standard fields use renderKeyValueTable; extra rows (size, URL, download
+// path) are appended with special formatting.
 func renderFileInfoTable(info map[string]any) {
 	t := table.New()
 	t.Header("KEY", "VALUE")
 
-	fields := []struct {
-		key   string
-		label string
-	}{
-		{"id", "ID"},
-		{"name", "Name"},
-		{"title", "Title"},
-		{"mimetype", "Type"},
-		{"filetype", "File Type"},
-		{"mode", "Mode"},
-		{"user", "User"},
-		{"created", "Created"},
-		{"channels", "Channels"},
-	}
-
-	for _, f := range fields {
-		val := info[f.key]
+	// Standard fields (skip empty).
+	for _, f := range fileInfoFields {
+		val := info[f.Key]
 		if val == nil || val == "" {
 			continue
 		}
-		t.Row(f.label, fmt.Sprintf("%v", val))
+		t.Row(f.Label, fmt.Sprintf("%v", val))
 	}
 
 	// Size gets special formatting.
@@ -301,16 +290,4 @@ func renderFileInfoTable(info map[string]any) {
 	}
 
 	_ = t.Flush()
-}
-
-// toInt converts an any value to int, handling both float64 (JSON default) and int.
-func toInt(v any) (int, bool) {
-	switch n := v.(type) {
-	case float64:
-		return int(n), true
-	case int:
-		return n, true
-	default:
-		return 0, false
-	}
 }

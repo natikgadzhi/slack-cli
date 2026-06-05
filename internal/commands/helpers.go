@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
@@ -308,6 +309,130 @@ func writeThreadFile(derivedDir string, items []formatting.Message, channelID, c
 	}
 
 	return nil
+}
+
+// --- Shared type-extraction helpers ---
+//
+// These extract typed values from map[string]any (the shape Slack's JSON API
+// responses are decoded into). They're used across multiple command files.
+
+// getString safely extracts a string field from a map, returning "" if missing.
+func getString(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// getBool safely extracts a boolean field from a map, returning false if missing.
+func getBool(m map[string]any, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
+// toInt converts an any value to int, handling both float64 (JSON default) and int.
+func toInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	default:
+		return 0, false
+	}
+}
+
+// toFloat converts an any value to float64, handling float64 and int.
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	default:
+		return 0, false
+	}
+}
+
+// extractStringSlice extracts a []string from result[key], where the API
+// returns an array of strings (e.g. conversations.members returns
+// {"members": ["U1", "U2"]}). The key parameter allows reuse across different
+// API responses that return string arrays under different field names.
+func extractStringSlice(result map[string]any, key string) []string { //nolint:unparam
+	raw, ok := result[key]
+	if !ok {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	strs := make([]string, 0, len(arr))
+	for _, elem := range arr {
+		if s, ok := elem.(string); ok {
+			strs = append(strs, s)
+		}
+	}
+	return strs
+}
+
+// --- Shared input-parsing helpers ---
+
+// parseMessageInput resolves a channel ID and message timestamp from either a
+// positional URL argument or --channel/--ts flags. This is the shared input
+// validator for commands that target a single message (message, reactions get).
+//
+// When the --channel flag is a name rather than an ID, the caller is
+// responsible for resolving it to an ID afterward (via channels.ResolveChannel).
+func parseMessageInput(args []string, channelFlag, tsFlag string) (channelID, messageTS string, err error) {
+	hasURL := len(args) == 1
+	hasChannel := channelFlag != ""
+	hasTS := tsFlag != ""
+
+	switch {
+	case hasURL && (hasChannel || hasTS):
+		return "", "", fmt.Errorf("cannot combine a positional URL with --channel/--ts flags")
+	case hasURL:
+		cid, mts, threadTS, parseErr := formatting.ParseSlackURL(args[0])
+		if parseErr != nil {
+			return "", "", fmt.Errorf("parsing URL: %w", parseErr)
+		}
+		ts := mts
+		if threadTS != "" {
+			ts = threadTS
+		}
+		return cid, ts, nil
+	case hasChannel && hasTS:
+		return channelFlag, tsFlag, nil
+	case hasChannel || hasTS:
+		return "", "", fmt.Errorf("--channel and --ts must be provided together")
+	default:
+		return "", "", fmt.Errorf("provide a message URL or --channel and --ts")
+	}
+}
+
+// --- Shared key-value table rendering ---
+
+// kvField describes a single row in a key-value table.
+type kvField struct {
+	Key   string // map key to look up the value
+	Label string // human-readable label for the KEY column
+}
+
+// renderKeyValueTable renders a map as a two-column KEY/VALUE table using the
+// supplied field list. All fields are shown including false/empty values; use
+// this for profile-style output where boolean fields should be visible.
+func renderKeyValueTable(data map[string]any, fields []kvField) {
+	t := table.New()
+	t.Header("KEY", "VALUE")
+
+	for _, f := range fields {
+		t.Row(f.Label, fmt.Sprintf("%v", data[f.Key]))
+	}
+
+	_ = t.Flush()
 }
 
 // writeSearchItemFiles writes each search result as its own markdown file

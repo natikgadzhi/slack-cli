@@ -1,23 +1,19 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	clierrors "github.com/natikgadzhi/cli-kit/errors"
 	"github.com/natikgadzhi/cli-kit/output"
 	"github.com/natikgadzhi/cli-kit/progress"
 	"github.com/natikgadzhi/cli-kit/table"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/natikgadzhi/slack-cli/internal/api"
 	"github.com/natikgadzhi/slack-cli/internal/channels"
-	"github.com/natikgadzhi/slack-cli/internal/formatting"
 )
 
 // Reaction holds a single emoji reaction with resolved user names.
@@ -48,35 +44,10 @@ func init() {
 	reactionsGetCmd.Flags().String("channel", "", "Channel name or ID")
 	reactionsGetCmd.Flags().String("ts", "", "Message timestamp")
 
-	// Complete the --channel flag from the user's channel list.
-	_ = reactionsGetCmd.RegisterFlagCompletionFunc("channel", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return completeChannelNames(cmd, args, toComplete)
-	})
+	_ = reactionsGetCmd.RegisterFlagCompletionFunc("channel", completeChannelNames)
 
 	reactionsCmd.AddCommand(reactionsGetCmd)
 	rootCmd.AddCommand(reactionsCmd)
-}
-
-// parseReactionsInput resolves the channel ID and message timestamp from either
-// a positional URL argument or --channel/--ts flags. It returns an error if the
-// input combination is invalid.
-func parseReactionsInput(args []string, channelFlag, tsFlag string) (channelID, messageTS string, err error) {
-	switch {
-	case len(args) == 1 && (channelFlag != "" || tsFlag != ""):
-		return "", "", fmt.Errorf("cannot use both a message URL argument and --channel/--ts flags")
-	case len(args) == 1:
-		cid, mts, _, parseErr := formatting.ParseSlackURL(args[0])
-		if parseErr != nil {
-			return "", "", fmt.Errorf("parsing URL: %w", parseErr)
-		}
-		return cid, mts, nil
-	case channelFlag != "" && tsFlag != "":
-		return channelFlag, tsFlag, nil
-	case channelFlag != "" || tsFlag != "":
-		return "", "", fmt.Errorf("both --channel and --ts are required when not using a URL")
-	default:
-		return "", "", fmt.Errorf("provide a message URL or both --channel and --ts")
-	}
 }
 
 // runReactionsGet fetches reactions on a message and renders them.
@@ -84,7 +55,7 @@ func runReactionsGet(cmd *cobra.Command, args []string) error {
 	channelFlag, _ := cmd.Flags().GetString("channel")
 	tsFlag, _ := cmd.Flags().GetString("ts")
 
-	channelID, messageTS, err := parseReactionsInput(args, channelFlag, tsFlag)
+	channelID, messageTS, err := parseMessageInput(args, channelFlag, tsFlag)
 	if err != nil {
 		return err
 	}
@@ -104,11 +75,10 @@ func runReactionsGet(cmd *cobra.Command, args []string) error {
 		if !output.IsJSON(format) {
 			progressWriter = os.Stderr
 		}
-		resolved, err := channels.ResolveChannel(client, channelID, progressWriter, debug)
+		channelID, err = channels.ResolveChannel(client, channelID, progressWriter, debug)
 		if err != nil {
 			return fmt.Errorf("resolving channel: %w", err)
 		}
-		channelID = resolved
 	}
 
 	// Show spinner while fetching.
@@ -139,35 +109,20 @@ func runReactionsGet(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Collect all unique user IDs across all reactions.
-	uniqueUIDs := make(map[string]struct{})
+	// Resolve user IDs to display names. We collect unique IDs first to avoid
+	// resolving the same user multiple times.
+	nameMap := make(map[string]string)
 	for _, r := range rawReactions {
 		if users, ok := r["users"].([]any); ok {
 			for _, u := range users {
 				if uid, ok := u.(string); ok && uid != "" {
-					uniqueUIDs[uid] = struct{}{}
+					if _, seen := nameMap[uid]; !seen {
+						nameMap[uid] = resolver.DisplayName(uid)
+					}
 				}
 			}
 		}
 	}
-
-	// Resolve all user IDs to display names in batch.
-	nameMap := make(map[string]string, len(uniqueUIDs))
-	var mu sync.Mutex
-
-	g, _ := errgroup.WithContext(context.Background())
-	g.SetLimit(5)
-
-	for uid := range uniqueUIDs {
-		g.Go(func() error {
-			name := resolver.DisplayName(uid)
-			mu.Lock()
-			nameMap[uid] = name
-			mu.Unlock()
-			return nil
-		})
-	}
-	_ = g.Wait()
 
 	// Build the structured reaction objects.
 	reactions := make([]Reaction, 0, len(rawReactions))
@@ -179,11 +134,7 @@ func runReactionsGet(cmd *cobra.Command, args []string) error {
 		if users, ok := r["users"].([]any); ok {
 			for _, u := range users {
 				if uid, ok := u.(string); ok && uid != "" {
-					if resolved, found := nameMap[uid]; found {
-						userNames = append(userNames, resolved)
-					} else {
-						userNames = append(userNames, uid)
-					}
+					userNames = append(userNames, nameMap[uid])
 				}
 			}
 		}

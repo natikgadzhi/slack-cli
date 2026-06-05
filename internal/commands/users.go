@@ -212,22 +212,6 @@ func extractUserFields(member map[string]any) map[string]any {
 	return r
 }
 
-// getString safely extracts a string field from a map, returning "" if missing.
-func getString(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-// getBool safely extracts a boolean field from a map, returning false if missing.
-func getBool(m map[string]any, key string) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
-}
-
 // renderUsersTable renders users as a table to stdout.
 func renderUsersTable(users []map[string]any) {
 	t := table.New()

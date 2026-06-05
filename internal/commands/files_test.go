@@ -180,60 +180,8 @@ func TestFormatSize(t *testing.T) {
 	}
 }
 
-func TestToInt(t *testing.T) {
-	tests := []struct {
-		input any
-		want  int
-		ok    bool
-	}{
-		{float64(42), 42, true},
-		{float64(0), 0, true},
-		{float64(1.9), 1, true},
-		{42, 42, true},
-		{0, 0, true},
-		{"42", 0, false},
-		{nil, 0, false},
-		{true, 0, false},
-	}
-
-	for _, tc := range tests {
-		got, ok := toInt(tc.input)
-		if ok != tc.ok {
-			t.Errorf("toInt(%v) ok = %v, want %v", tc.input, ok, tc.ok)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("toInt(%v) = %d, want %d", tc.input, got, tc.want)
-		}
-	}
-}
-
-func TestToFloat(t *testing.T) {
-	tests := []struct {
-		input any
-		want  float64
-		ok    bool
-	}{
-		{float64(42.5), 42.5, true},
-		{float64(0), 0, true},
-		{42, 42, true},
-		{0, 0, true},
-		{"42.5", 0, false},
-		{nil, 0, false},
-		{true, 0, false},
-	}
-
-	for _, tc := range tests {
-		got, ok := toFloat(tc.input)
-		if ok != tc.ok {
-			t.Errorf("toFloat(%v) ok = %v, want %v", tc.input, ok, tc.ok)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("toFloat(%v) = %f, want %f", tc.input, got, tc.want)
-		}
-	}
-}
+// toInt and toFloat tests live in helpers_test.go since the functions are now
+// in helpers.go alongside other shared extraction utilities.
 
 func TestExtractFileInfo_NoChannels(t *testing.T) {
 	file := map[string]any{

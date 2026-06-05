@@ -192,25 +192,3 @@ func runChannelsMembers(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
-// extractStringSlice extracts a []string from result[key], where the API
-// returns an array of strings (e.g. conversations.members returns
-// {"members": ["U1", "U2"]}). The key parameter allows reuse across different
-// API responses that return string arrays under different field names.
-func extractStringSlice(result map[string]any, key string) []string { //nolint:unparam // key kept for generality and testability
-	raw, ok := result[key]
-	if !ok {
-		return nil
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-	strs := make([]string, 0, len(arr))
-	for _, elem := range arr {
-		if s, ok := elem.(string); ok {
-			strs = append(strs, s)
-		}
-	}
-	return strs
-}
