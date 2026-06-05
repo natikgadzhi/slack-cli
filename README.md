@@ -95,6 +95,7 @@ slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
 slack-cli channels members general
 slack-cli channels search eng
+slack-cli files read F12345678
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
 slack-cli unread --limit 50
@@ -279,6 +280,30 @@ slack-cli channels search infra --include-archived
 | `-n`, `--limit` | `20` | Maximum number of results |
 | `--type` | `public_channel,private_channel,mpim,im` | Conversation types to search |
 | `--include-archived` | `false` | Include archived channels |
+
+### `files read`
+
+Fetch a Slack file's metadata and, for text files, its content.
+
+```sh
+slack-cli files read F12345678
+slack-cli files read F12345678 -o json
+slack-cli files read F12345678 --download
+slack-cli files read F12345678 --download --download-dir ./my-files
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--download` | `false` | Download the file to disk |
+| `--download-dir` | `slack-files` | Directory for downloaded files |
+
+For text-like files (mimetypes starting with `text/`, plus `application/json`,
+`application/xml`, etc.) the file content is fetched and printed to stdout after
+the metadata table. For binary files, only metadata (name, type, size, URL) is
+shown.
+
+In JSON output, text file content is included as a `content` field. The
+`--download` flag saves any file to disk regardless of type.
 
 ### `search`
 
