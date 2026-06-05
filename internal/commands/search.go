@@ -192,10 +192,11 @@ func buildSearchQuery(queryArg, from string) string {
 	return strings.Join(parts, " ")
 }
 
-// looksLikeUserID returns true if s starts with "U" and the rest is alphanumeric.
-// Slack user IDs have the form U[A-Z0-9]+.
+// looksLikeUserID returns true if s starts with "U" or "W" and the rest is
+// alphanumeric. Slack user IDs have the form U[A-Z0-9]+ or W[A-Z0-9]+
+// (enterprise grid).
 func looksLikeUserID(s string) bool {
-	if len(s) < 2 || s[0] != 'U' {
+	if len(s) < 2 || (s[0] != 'U' && s[0] != 'W') {
 		return false
 	}
 	for _, r := range s[1:] {

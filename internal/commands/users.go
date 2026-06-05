@@ -14,27 +14,52 @@ import (
 	"github.com/natikgadzhi/slack-cli/internal/api"
 )
 
+// usersCmd is the parent command for user-related subcommands.
+// When invoked without a subcommand, it delegates to "users list" for
+// backward compatibility.
 var usersCmd = &cobra.Command{
 	Use:   "users",
+	Short: "Manage and view workspace users",
+	Example: `  slack-cli users
+  slack-cli users list --limit 50
+  slack-cli users get alice
+  slack-cli users search "alice"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runUsersList(cmd, args)
+	},
+}
+
+// usersListCmd lists workspace members.
+var usersListCmd = &cobra.Command{
+	Use:   "list",
 	Short: "List workspace users",
 	Args:  cobra.NoArgs,
-	Example: `  slack-cli users
-  slack-cli users --limit 50
-  slack-cli users --include-bots --include-deactivated
-  slack-cli users -o json | jq '.[] | select(.email | contains("@example.com"))'`,
-	RunE: runUsers,
+	Example: `  slack-cli users list
+  slack-cli users list --limit 50
+  slack-cli users list --include-bots --include-deactivated
+  slack-cli users list -o json | jq '.[] | select(.email | contains("@example.com"))'`,
+	RunE: runUsersList,
 }
 
 func init() {
+	// Flags on the parent command so that bare "users" still works with the
+	// same flags as "users list".
 	usersCmd.Flags().IntP("limit", "n", 100, "Maximum number of users to list")
 	usersCmd.Flags().Bool("include-bots", false, "Include bot users")
 	usersCmd.Flags().Bool("include-deactivated", false, "Include deactivated users")
+
+	// Same flags on the list subcommand.
+	usersListCmd.Flags().IntP("limit", "n", 100, "Maximum number of users to list")
+	usersListCmd.Flags().Bool("include-bots", false, "Include bot users")
+	usersListCmd.Flags().Bool("include-deactivated", false, "Include deactivated users")
+
+	usersCmd.AddCommand(usersListCmd)
 	rootCmd.AddCommand(usersCmd)
 }
 
-// runUsers fetches workspace members via users.list with cursor-based
+// runUsersList fetches workspace members via users.list with cursor-based
 // pagination and renders them as a table or JSON.
-func runUsers(cmd *cobra.Command, _ []string) error {
+func runUsersList(cmd *cobra.Command, _ []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	includeBots, _ := cmd.Flags().GetBool("include-bots")
 	includeDeactivated, _ := cmd.Flags().GetBool("include-deactivated")
@@ -193,6 +218,14 @@ func getString(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+// getBool safely extracts a boolean field from a map, returning false if missing.
+func getBool(m map[string]any, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
 }
 
 // renderUsersTable renders users as a table to stdout.

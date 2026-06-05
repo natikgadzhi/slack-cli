@@ -97,7 +97,9 @@ slack-cli channels search eng
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
 slack-cli unread --limit 50
-slack-cli users
+slack-cli users list
+slack-cli users get alice
+slack-cli users search "alice"
 ```
 
 ## Shell completion
@@ -117,6 +119,7 @@ Beyond the static command/flag tree, completion is **dynamic** where it helps:
 | Where | Completes |
 |-------|-----------|
 | `channels get <TAB>`, `channels members <TAB>` | Channel names from your channel list |
+| `users get <TAB>` | User handles (annotated with real names) |
 | `search --from <TAB>` | User handles (annotated with real names); a leading `@` is honored |
 | `channels list --type <TAB>`, `channels search --type <TAB>` | `public_channel`, `private_channel`, `mpim`, `im` |
 | `search --sort <TAB>` | `relevance`, `recent` |
@@ -378,15 +381,16 @@ is fetched, so very large unread backlogs may be truncated; muted channels are n
 specially handled; thread-reply permalinks open the reply's channel (the `thread_ts`
 is included in JSON for context).
 
-### `users`
+### `users list`
 
-List workspace users.
+List workspace users. Running `users` with no subcommand is equivalent to
+`users list`.
 
 ```sh
-slack-cli users
-slack-cli users --limit 50
-slack-cli users --include-bots --include-deactivated
-slack-cli users -o json
+slack-cli users list
+slack-cli users list --limit 50
+slack-cli users list --include-bots --include-deactivated
+slack-cli users list -o json
 ```
 
 | Flag | Default | Description |
@@ -394,6 +398,44 @@ slack-cli users -o json
 | `-n`, `--limit` | `100` | Maximum number of users |
 | `--include-bots` | `false` | Include bot users |
 | `--include-deactivated` | `false` | Include deactivated users |
+
+### `users get`
+
+Look up a single user's full profile by handle or user ID.
+
+```sh
+slack-cli users get alice
+slack-cli users get U12345678
+slack-cli users get @alice
+slack-cli users get alice -o json
+```
+
+Table output uses a two-column key-value layout showing: ID, Name, Real Name,
+Display Name, Email, Title, Status, Status Emoji, Timezone, Phone, Admin, Owner,
+Bot, and Deactivated. JSON output returns a single object with all fields.
+
+When given a handle (e.g. `alice`), the command searches via Slack's
+`users.search` API to resolve the user ID, then fetches the full profile via
+`users.info`. When given a user ID (e.g. `U12345678`), it calls `users.info`
+directly.
+
+### `users search`
+
+Search users by name, handle, or email.
+
+```sh
+slack-cli users search alice
+slack-cli users search "alice smith"
+slack-cli users search alice --limit 10
+slack-cli users search alice -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `20` | Maximum number of results |
+
+Uses Slack's internal `users.search` API. Results are displayed in the same
+columnar table format as `users list` (ID, NAME, REAL NAME, EMAIL).
 
 ### `version`
 
