@@ -268,6 +268,36 @@ func (c *Client) DownloadFile(fileURL, destPath string) error {
 	return nil
 }
 
+// FetchFileContent fetches the content of a Slack-hosted file URL using the
+// client's auth credentials and returns the raw bytes. This is used to read
+// text file content inline without writing to disk.
+func (c *Client) FetchFileContent(fileURL string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating fetch request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.xoxc)
+	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
+	req.Header.Set("Cookie", "d="+wireXoxd)
+	req.Header.Set("User-Agent", config.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching file content: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("fetch returned HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading file content: %w", err)
+	}
+	return body, nil
+}
+
 // --- helpers ---
 
 // encodeParams builds a URL-encoded form body from the param map.
