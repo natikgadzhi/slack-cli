@@ -92,6 +92,7 @@ slack-cli auth check
 slack-cli message 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli channels get general --since 2d --limit 100
 slack-cli channels list
+slack-cli channels members general
 slack-cli channels search eng
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
@@ -115,7 +116,7 @@ Beyond the static command/flag tree, completion is **dynamic** where it helps:
 
 | Where | Completes |
 |-------|-----------|
-| `channels get <TAB>` | Channel names from your channel list |
+| `channels get <TAB>`, `channels members <TAB>` | Channel names from your channel list |
 | `search --from <TAB>` | User handles (annotated with real names); a leading `@` is honored |
 | `channels list --type <TAB>`, `channels search --type <TAB>` | `public_channel`, `private_channel`, `mpim`, `im` |
 | `search --sort <TAB>` | `relevance`, `recent` |
@@ -229,6 +230,26 @@ slack-cli channels list --include-archived
 | `-n`, `--limit` | `100` | Maximum number of channels to return |
 | `--type` | `public_channel,private_channel` | Comma-separated conversation types |
 | `--include-archived` | `false` | Include archived channels |
+
+### `channels members`
+
+List members of a channel.
+
+```sh
+slack-cli channels members general
+slack-cli channels members C12345678
+slack-cli channels members general --limit 50
+slack-cli channels members general --include-bots --include-deactivated
+slack-cli channels members general -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `100` | Maximum number of members to return |
+| `--include-bots` | `false` | Include bot users |
+| `--include-deactivated` | `false` | Include deactivated users |
+
+Output columns match the `users` command: ID, NAME, REAL NAME, EMAIL.
 
 ### `channels search`
 
