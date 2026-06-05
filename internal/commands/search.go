@@ -28,6 +28,7 @@ var searchCmd = &cobra.Command{
   slack-cli search --from @alice "deployment"
   slack-cli search --from @alice
   slack-cli search --from @alice --sort recent
+  slack-cli search "deployment failed" --context 3
   slack-cli search "from:@alice" -o json | jq '.[].text'`,
 	RunE: runSearch,
 }
@@ -36,6 +37,7 @@ func init() {
 	searchCmd.Flags().IntP("limit", "n", 20, "Maximum number of results")
 	searchCmd.Flags().String("from", "", "Filter messages from a specific user (handle or user ID)")
 	searchCmd.Flags().String("sort", "relevance", "Sort order: relevance or recent")
+	searchCmd.Flags().IntP("context", "C", 0, "Number of surrounding messages to fetch for each hit")
 	_ = searchCmd.RegisterFlagCompletionFunc("from", completeUserHandles)
 	_ = searchCmd.RegisterFlagCompletionFunc("sort", staticCompletion("relevance", "recent"))
 	rootCmd.AddCommand(searchCmd)
@@ -58,6 +60,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	from, _ := cmd.Flags().GetString("from")
 	sortFlag, _ := cmd.Flags().GetString("sort")
 	limit, _ := cmd.Flags().GetInt("limit")
+	contextN, _ := cmd.Flags().GetInt("context")
 
 	var queryArg string
 	if len(args) > 0 {
@@ -124,6 +127,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 		if ch, ok := m["channel"].(map[string]any); ok {
 			r["channel"] = searchChannelLabel(ch, resolver)
+			// Store channel ID for context fetching.
+			if chID, ok := ch["id"].(string); ok {
+				r["channel_id"] = chID
+			}
 		}
 
 		if user, ok := m["username"].(string); ok && user != "" {
@@ -144,13 +151,24 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		results = append(results, r)
 	}
 
+	// Fetch surrounding context messages when --context N > 0.
+	if contextN > 0 {
+		fetchSearchContext(client, resolver, results, contextN, format)
+	}
+
 	// Render output.
 	if output.IsJSON(format) {
-		if err := output.PrintJSON(results); err != nil {
+		// Strip internal channel_id field before rendering JSON.
+		cleaned := cleanSearchResultsForJSON(results)
+		if err := output.PrintJSON(cleaned); err != nil {
 			return err
 		}
 	} else {
-		renderSearchTable(results)
+		if contextN > 0 {
+			renderSearchTableWithContext(results)
+		} else {
+			renderSearchTable(results)
+		}
 	}
 
 	// Cache the result (best-effort).
@@ -277,4 +295,186 @@ func renderSearchTable(results []map[string]any) {
 		t.Row(getString(r, "channel"), timeCell, getString(r, "user"), truncate(getString(r, "text"), 80))
 	}
 	_ = t.Flush()
+}
+
+// fetchSearchContext fetches surrounding messages for each search hit using
+// conversations.history. For each hit, it makes two API calls:
+//   - Before: conversations.history with latest=<hit_ts>, limit=N, inclusive=false
+//   - After: conversations.history with oldest=<hit_ts>, limit=N+1, inclusive=false
+//
+// Context messages are stored on each result as "context_before" and "context_after"
+// arrays. Rate-limit errors are warned about, not fatal.
+func fetchSearchContext(client *api.Client, resolver *users.UserResolver, results []map[string]any, n int, format string) {
+	counter := progress.NewCounter("Fetching context", format)
+
+	for i, r := range results {
+		counter.Update(i + 1)
+
+		channelID := getString(r, "channel_id")
+		hitTS := getString(r, "ts")
+		if channelID == "" || hitTS == "" {
+			continue
+		}
+
+		// Fetch N messages before the hit (newest first, so reverse for chronological order).
+		beforeMsgs := fetchContextMessages(client, channelID, hitTS, n, true)
+
+		// Fetch N messages after the hit.
+		afterMsgs := fetchContextMessages(client, channelID, hitTS, n, false)
+
+		// Resolve user IDs in context messages.
+		if len(beforeMsgs) > 0 {
+			resolved, err := resolver.ResolveUsers(beforeMsgs)
+			if err == nil {
+				beforeMsgs = resolved
+			}
+		}
+		if len(afterMsgs) > 0 {
+			resolved, err := resolver.ResolveUsers(afterMsgs)
+			if err == nil {
+				afterMsgs = resolved
+			}
+		}
+
+		// Build context result slices.
+		if len(beforeMsgs) > 0 {
+			before := make([]map[string]any, 0, len(beforeMsgs))
+			for _, m := range beforeMsgs {
+				before = append(before, contextMessageToResult(m))
+			}
+			results[i]["context_before"] = before
+		}
+		if len(afterMsgs) > 0 {
+			after := make([]map[string]any, 0, len(afterMsgs))
+			for _, m := range afterMsgs {
+				after = append(after, contextMessageToResult(m))
+			}
+			results[i]["context_after"] = after
+		}
+	}
+
+	counter.Finish()
+}
+
+// fetchContextMessages calls conversations.history to get messages around a
+// given timestamp. If before is true, it fetches messages older than ts
+// (returned in chronological order). If before is false, it fetches messages
+// newer than ts.
+func fetchContextMessages(client *api.Client, channelID, ts string, n int, before bool) []map[string]any {
+	params := map[string]string{
+		"channel":   channelID,
+		"limit":     strconv.Itoa(n),
+		"inclusive": "false",
+	}
+
+	if before {
+		// Get messages before the hit: latest=ts means "messages older than ts".
+		params["latest"] = ts
+	} else {
+		// Get messages after the hit: oldest=ts means "messages newer than ts".
+		params["oldest"] = ts
+	}
+
+	result, err := client.Call("conversations.history", params)
+	if err != nil {
+		// Warn on rate limit or other errors; don't fail the whole command.
+		if _, ok := api.AsRateLimitError(err); ok {
+			fmt.Fprintf(os.Stderr, "warning: rate limited fetching context for %s; skipping\n", ts)
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: fetching context for %s: %v\n", ts, err)
+		}
+		return nil
+	}
+
+	messages := api.ExtractItems(result, "messages")
+
+	if before {
+		// conversations.history returns newest first; reverse for chronological order.
+		reverseSlice(messages)
+	}
+
+	return messages
+}
+
+// contextMessageToResult converts a raw conversations.history message into a
+// result map with ts, user, and text fields, matching the shape of search results.
+func contextMessageToResult(m map[string]any) map[string]any {
+	r := make(map[string]any)
+	if ts, ok := m["ts"].(string); ok {
+		r["ts"] = ts
+	}
+	if user, ok := m["user"].(string); ok {
+		r["user"] = user
+	}
+	if text, ok := m["text"].(string); ok {
+		text = formatting.UnescapeEntities(strings.TrimSpace(text))
+		r["text"] = text
+	}
+	return r
+}
+
+// reverseSlice reverses a slice of maps in place.
+func reverseSlice(s []map[string]any) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+}
+
+// renderSearchTableWithContext renders search results with surrounding context
+// messages. The hit is marked with a ">" prefix, context messages with "|".
+// Groups are separated by a blank row.
+func renderSearchTableWithContext(results []map[string]any) {
+	t := table.New()
+	t.Header("CHANNEL", "TIME", "USER", "TEXT")
+
+	for i, r := range results {
+		channel := getString(r, "channel")
+
+		// Render context_before messages.
+		if before, ok := r["context_before"].([]map[string]any); ok {
+			for _, ctx := range before {
+				timeCell := internalOutput.FormatTS(getString(ctx, "ts"))
+				t.Row(channel, timeCell, getString(ctx, "user"), truncate("| "+getString(ctx, "text"), 80))
+			}
+		}
+
+		// Render the hit itself, marked with ">".
+		timeCell := internalOutput.FormatTS(getString(r, "ts"))
+		if link := getString(r, "permalink"); link != "" {
+			timeCell = table.Hyperlink(link, timeCell)
+		}
+		t.Row(channel, timeCell, getString(r, "user"), truncate("> "+getString(r, "text"), 80))
+
+		// Render context_after messages.
+		if after, ok := r["context_after"].([]map[string]any); ok {
+			for _, ctx := range after {
+				timeCell := internalOutput.FormatTS(getString(ctx, "ts"))
+				t.Row(channel, timeCell, getString(ctx, "user"), truncate("| "+getString(ctx, "text"), 80))
+			}
+		}
+
+		// Add separator between groups (blank row), except after the last.
+		if i < len(results)-1 {
+			t.Row("", "", "", "")
+		}
+	}
+
+	_ = t.Flush()
+}
+
+// cleanSearchResultsForJSON removes internal fields (channel_id) from results
+// and returns a cleaned copy suitable for JSON output.
+func cleanSearchResultsForJSON(results []map[string]any) []map[string]any {
+	cleaned := make([]map[string]any, 0, len(results))
+	for _, r := range results {
+		c := make(map[string]any, len(r))
+		for k, v := range r {
+			if k == "channel_id" {
+				continue
+			}
+			c[k] = v
+		}
+		cleaned = append(cleaned, c)
+	}
+	return cleaned
 }
