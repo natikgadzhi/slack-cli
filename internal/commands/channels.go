@@ -53,7 +53,7 @@ var channelCmd = &cobra.Command{
 		"slack-cli channels get general --since 2d",
 		"slack-cli channels get C12345678",
 	),
-	RunE:       runChannel,
+	RunE: runChannel,
 }
 
 func init() {

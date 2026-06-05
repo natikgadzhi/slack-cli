@@ -247,7 +247,7 @@ func (c *Client) authenticatedGet(fileURL string) (*http.Response, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
@@ -262,7 +262,7 @@ func (c *Client) DownloadFile(fileURL, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("downloading file: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
@@ -272,7 +272,7 @@ func (c *Client) DownloadFile(fileURL, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("creating file: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return fmt.Errorf("writing file: %w", err)
@@ -287,7 +287,7 @@ func (c *Client) FetchFileContent(fileURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching file content: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

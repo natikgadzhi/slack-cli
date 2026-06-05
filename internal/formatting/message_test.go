@@ -455,7 +455,7 @@ func TestFormatMessage_ExtractsFiles(t *testing.T) {
 
 func TestFormatMessage_SkipsFilesWithNoName(t *testing.T) {
 	msg := FormatMessage(map[string]any{
-		"ts":   "1700000000.000000",
+		"ts": "1700000000.000000",
 		"files": []any{
 			map[string]any{"id": "F0000"},
 		},

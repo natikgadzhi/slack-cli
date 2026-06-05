@@ -72,6 +72,7 @@ func TestNewUserResolver(t *testing.T) {
 	}
 	if resolver == nil {
 		t.Fatal("expected non-nil resolver")
+		return
 	}
 	if resolver.client != client {
 		t.Error("resolver should use the provided client")

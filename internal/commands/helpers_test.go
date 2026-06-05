@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/natikgadzhi/slack-cli/internal/cache"
 	"github.com/spf13/cobra"
+
+	"github.com/natikgadzhi/slack-cli/internal/cache"
 )
 
 func TestFormatMessages_Empty(t *testing.T) {
