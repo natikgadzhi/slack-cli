@@ -126,31 +126,4 @@ func TestExtractFullUserProfile_EmptyUser(t *testing.T) {
 	}
 }
 
-func TestGetProfileString(t *testing.T) {
-	profile := map[string]any{
-		"email": "alice@example.com",
-		"title": "",
-	}
-
-	// Normal string extraction.
-	if got := getProfileString(profile, "email"); got != "alice@example.com" {
-		t.Errorf("getProfileString(profile, email) = %q, want %q", got, "alice@example.com")
-	}
-
-	// Empty string.
-	if got := getProfileString(profile, "title"); got != "" {
-		t.Errorf("getProfileString(profile, title) = %q, want empty", got)
-	}
-
-	// Missing key.
-	if got := getProfileString(profile, "phone"); got != "" {
-		t.Errorf("getProfileString(profile, phone) = %q, want empty", got)
-	}
-
-	// Nil profile.
-	if got := getProfileString(nil, "email"); got != "" {
-		t.Errorf("getProfileString(nil, email) = %q, want empty", got)
-	}
-}
-
 // getBool tests live in helpers_test.go since the function is now in helpers.go.

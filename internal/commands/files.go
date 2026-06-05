@@ -57,30 +57,27 @@ func init() {
 
 // isTextMimetype returns true if the mimetype indicates a text-like file whose
 // content can be displayed inline.
+var textMimetypes = map[string]bool{
+	"application/json":            true,
+	"application/xml":             true,
+	"application/javascript":      true,
+	"application/x-javascript":    true,
+	"application/typescript":      true,
+	"application/x-yaml":          true,
+	"application/yaml":            true,
+	"application/x-sh":            true,
+	"application/x-shellscript":   true,
+	"application/toml":            true,
+	"application/x-toml":          true,
+}
+
 func isTextMimetype(mimetype string) bool {
 	if strings.HasPrefix(mimetype, "text/") {
 		return true
 	}
-	textTypes := []string{
-		"application/json",
-		"application/xml",
-		"application/javascript",
-		"application/x-javascript",
-		"application/typescript",
-		"application/x-yaml",
-		"application/yaml",
-		"application/x-sh",
-		"application/x-shellscript",
-		"application/toml",
-		"application/x-toml",
-	}
-	for _, t := range textTypes {
-		if mimetype == t {
-			return true
-		}
-	}
-	return false
+	return textMimetypes[mimetype]
 }
+
 
 // extractFileInfo extracts displayable fields from a raw Slack file object
 // returned by files.info.

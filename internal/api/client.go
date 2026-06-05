@@ -229,13 +229,12 @@ func (c *Client) checkAuth() (bool, error) {
 	return false, nil
 }
 
-// DownloadFile fetches a Slack-hosted file URL using the client's auth
-// credentials and writes the content to destPath. Parent directories are
-// created as needed.
-func (c *Client) DownloadFile(fileURL, destPath string) error {
+// authenticatedGet performs an authenticated GET request to a Slack-hosted URL
+// and returns the response. The caller is responsible for closing the body.
+func (c *Client) authenticatedGet(fileURL string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
 	if err != nil {
-		return fmt.Errorf("creating download request: %w", err)
+		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.xoxc)
 	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
@@ -244,13 +243,26 @@ func (c *Client) DownloadFile(fileURL, destPath string) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		return nil, fmt.Errorf("fetching URL: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	return resp, nil
+}
+
+// DownloadFile fetches a Slack-hosted file URL using the client's auth
+// credentials and writes the content to destPath. Parent directories are
+// created as needed.
+func (c *Client) DownloadFile(fileURL, destPath string) error {
+	resp, err := c.authenticatedGet(fileURL)
+	if err != nil {
 		return fmt.Errorf("downloading file: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("download returned HTTP %d", resp.StatusCode)
-	}
 
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
@@ -269,27 +281,13 @@ func (c *Client) DownloadFile(fileURL, destPath string) error {
 }
 
 // FetchFileContent fetches the content of a Slack-hosted file URL using the
-// client's auth credentials and returns the raw bytes. This is used to read
-// text file content inline without writing to disk.
+// client's auth credentials and returns the raw bytes.
 func (c *Client) FetchFileContent(fileURL string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating fetch request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.xoxc)
-	wireXoxd, _ := auth.SanitizeXoxd(c.xoxd)
-	req.Header.Set("Cookie", "d="+wireXoxd)
-	req.Header.Set("User-Agent", config.UserAgent)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.authenticatedGet(fileURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching file content: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("fetch returned HTTP %d", resp.StatusCode)
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

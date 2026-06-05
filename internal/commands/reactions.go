@@ -186,17 +186,9 @@ func extractReactions(result map[string]any) []map[string]any {
 	return reactions
 }
 
-// extractCount extracts the "count" field from a reaction map, handling both
-// float64 (JSON default) and int types.
 func extractCount(r map[string]any) int {
-	switch n := r["count"].(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	default:
-		return 0
-	}
+	n, _ := toInt(r["count"])
+	return n
 }
 
 // renderReactionsTable renders reactions as a table to stdout.

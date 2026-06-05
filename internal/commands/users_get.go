@@ -151,13 +151,13 @@ func extractFullUserProfile(user map[string]any) map[string]any {
 		"id":           getString(user, "id"),
 		"name":         getString(user, "name"),
 		"real_name":    getString(user, "real_name"),
-		"display_name": getProfileString(profile, "display_name"),
-		"email":        getProfileString(profile, "email"),
-		"title":        getProfileString(profile, "title"),
-		"status_text":  getProfileString(profile, "status_text"),
-		"status_emoji": getProfileString(profile, "status_emoji"),
+		"display_name": getString(profile, "display_name"),
+		"email":        getString(profile, "email"),
+		"title":        getString(profile, "title"),
+		"status_text":  getString(profile, "status_text"),
+		"status_emoji": getString(profile, "status_emoji"),
 		"timezone":     getString(user, "tz"),
-		"phone":        getProfileString(profile, "phone"),
+		"phone":        getString(profile, "phone"),
 		"is_admin":     getBool(user, "is_admin"),
 		"is_owner":     getBool(user, "is_owner"),
 		"is_bot":       getBool(user, "is_bot"),
@@ -165,15 +165,6 @@ func extractFullUserProfile(user map[string]any) map[string]any {
 	}
 
 	return r
-}
-
-// getProfileString extracts a string from a profile map, returning "" if the
-// profile is nil or the key is missing.
-func getProfileString(profile map[string]any, key string) string {
-	if profile == nil {
-		return ""
-	}
-	return getString(profile, key)
 }
 
 // userProfileFields defines the display order for user profile key-value tables.

@@ -42,16 +42,9 @@ var usersListCmd = &cobra.Command{
 }
 
 func init() {
-	// Flags on the parent command so that bare "users" still works with the
-	// same flags as "users list".
-	usersCmd.Flags().IntP("limit", "n", 100, "Maximum number of users to list")
-	usersCmd.Flags().Bool("include-bots", false, "Include bot users")
-	usersCmd.Flags().Bool("include-deactivated", false, "Include deactivated users")
-
-	// Same flags on the list subcommand.
-	usersListCmd.Flags().IntP("limit", "n", 100, "Maximum number of users to list")
-	usersListCmd.Flags().Bool("include-bots", false, "Include bot users")
-	usersListCmd.Flags().Bool("include-deactivated", false, "Include deactivated users")
+	usersCmd.PersistentFlags().IntP("limit", "n", 100, "Maximum number of users to list")
+	usersCmd.PersistentFlags().Bool("include-bots", false, "Include bot users")
+	usersCmd.PersistentFlags().Bool("include-deactivated", false, "Include deactivated users")
 
 	usersCmd.AddCommand(usersListCmd)
 	rootCmd.AddCommand(usersCmd)
