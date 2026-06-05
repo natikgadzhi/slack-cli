@@ -69,28 +69,15 @@ func runUsersSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Convert and truncate to limit.
-	var users []map[string]any
+	// Convert, extract fields, and truncate to limit in one pass.
+	var results []map[string]any
 	for _, r := range rawResults {
-		if len(users) >= limit {
+		if len(results) >= limit {
 			break
 		}
 		if u, ok := r.(map[string]any); ok {
-			users = append(users, u)
+			results = append(results, extractUserFields(u))
 		}
-	}
-
-	if len(users) == 0 {
-		if !output.IsJSON(format) {
-			fmt.Fprintln(os.Stderr, "no users found")
-		}
-		return nil
-	}
-
-	// Build clean result slice with the same fields as "users list".
-	results := make([]map[string]any, 0, len(users))
-	for _, u := range users {
-		results = append(results, extractUserFields(u))
 	}
 
 	if output.IsJSON(format) {
@@ -98,10 +85,7 @@ func runUsersSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	renderUsersTable(results)
-
-	if !output.IsJSON(format) {
-		fmt.Fprintf(os.Stderr, "Done. %d users found.\n", len(results))
-	}
+	fmt.Fprintf(os.Stderr, "Done. %d users found.\n", len(results))
 
 	return nil
 }

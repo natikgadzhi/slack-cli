@@ -188,31 +188,18 @@ func renderElement(sb *strings.Builder, elem canvasElement, depth int) {
 	indent := strings.Repeat("  ", depth+elem.Level)
 
 	switch elem.Type {
-	case "heading", "header":
-		text := collectText(elem)
-		if text != "" {
-			sb.WriteString("# ")
-			sb.WriteString(text)
-			sb.WriteString("\n\n")
+	case "heading", "header", "heading_1", "h1", "heading_2", "h2", "heading_3", "h3":
+		prefix := "#"
+		switch elem.Type {
+		case "heading_2", "h2":
+			prefix = "##"
+		case "heading_3", "h3":
+			prefix = "###"
 		}
-	case "heading_1", "h1":
 		text := collectText(elem)
 		if text != "" {
-			sb.WriteString("# ")
-			sb.WriteString(text)
-			sb.WriteString("\n\n")
-		}
-	case "heading_2", "h2":
-		text := collectText(elem)
-		if text != "" {
-			sb.WriteString("## ")
-			sb.WriteString(text)
-			sb.WriteString("\n\n")
-		}
-	case "heading_3", "h3":
-		text := collectText(elem)
-		if text != "" {
-			sb.WriteString("### ")
+			sb.WriteString(prefix)
+			sb.WriteString(" ")
 			sb.WriteString(text)
 			sb.WriteString("\n\n")
 		}
