@@ -97,6 +97,7 @@ slack-cli channels members general
 slack-cli channels search eng
 slack-cli emojis search fire
 slack-cli files read F12345678
+slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
 slack-cli unread --limit 50
@@ -198,6 +199,30 @@ exclusive -- providing both a URL and the flags is an error, as is providing onl
 one of `--channel` or `--ts`.
 
 Fetches the message and all thread replies, resolves user IDs to display names, and generates permalinks. File attachments are always listed in the output (name, type, size, URL). Use `--download-files` to save them to disk.
+
+### `reactions get`
+
+Show reactions on a Slack message.
+
+```sh
+slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
+slack-cli reactions get --channel general --ts 1741234567.123456
+slack-cli reactions get 'https://...' -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--channel` | | Channel name or ID (use with `--ts` instead of a URL) |
+| `--ts` | | Message timestamp (use with `--channel` instead of a URL) |
+
+You can identify the message either by its full Slack URL (positional argument)
+or by passing `--channel` and `--ts` together. The two modes are mutually
+exclusive.
+
+Table output shows EMOJI, COUNT, and USERS columns. EMOJI displays the reaction
+shortcode (e.g. `:thumbsup:`), COUNT shows the number of users who reacted, and
+USERS lists display names of those users. JSON output returns an array of
+reaction objects with resolved user names.
 
 ### `channels get`
 
