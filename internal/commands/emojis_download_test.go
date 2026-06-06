@@ -227,6 +227,88 @@ func TestManifestEntryFor_PopulatesAllFields(t *testing.T) {
 	}
 }
 
+func TestSyncOneEmoji_AdoptsExistingFileIntoEmptyManifest(t *testing.T) {
+	// Mirrors the upgrade scenario: a directory of images from a pre-manifest
+	// download run is pointed at the new tool. The existing files should be
+	// adopted into the manifest as "Skipped" without re-downloading.
+	dir := t.TempDir()
+	// Pre-existing image file (any bytes; we never read it).
+	if err := os.WriteFile(filepath.Join(dir, "fire.png"), []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := &emojiManifest{Emojis: map[string]emojiManifestEntry{}}
+	stats := &emojiDownloadStats{}
+	e := emojiAdminEntry{
+		Name:          "fire",
+		Type:          "custom",
+		URL:           "https://example.com/fire.png",
+		CreatedByName: "Alice",
+		Created:       time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	// nil client is safe because the skip branch never calls DownloadFile.
+	syncOneEmoji(nil, e, dir, manifest, false, stats)
+
+	if stats.Downloaded != 0 {
+		t.Errorf("Downloaded = %d, want 0", stats.Downloaded)
+	}
+	if stats.Skipped != 1 {
+		t.Errorf("Skipped = %d, want 1", stats.Skipped)
+	}
+	entry, ok := manifest.Emojis["fire"]
+	if !ok {
+		t.Fatal("expected fire to be adopted into the manifest")
+	}
+	if entry.CreatedByName != "Alice" || entry.LocalPath != "fire.png" {
+		t.Errorf("entry not populated: %+v", entry)
+	}
+}
+
+func TestSyncAlias_AdoptsExistingSidecarIntoEmptyManifest(t *testing.T) {
+	dir := t.TempDir()
+	// Pre-existing sidecar from an earlier run, no manifest yet.
+	if err := os.WriteFile(filepath.Join(dir, "campfire.alias"), []byte("fire\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := &emojiManifest{Emojis: map[string]emojiManifestEntry{}}
+	stats := &emojiDownloadStats{}
+	e := emojiAdminEntry{Name: "campfire", Type: "alias", AliasFor: "fire", CreatedByName: "Bob"}
+
+	syncAlias(e, dir, manifest, false, stats)
+
+	if stats.Skipped != 1 {
+		t.Errorf("Skipped = %d, want 1", stats.Skipped)
+	}
+	if stats.Aliases != 0 {
+		t.Errorf("Aliases = %d, want 0 (no rewrite)", stats.Aliases)
+	}
+	if got, ok := manifest.Emojis["campfire"]; !ok || got.CreatedByName != "Bob" {
+		t.Errorf("manifest entry not populated: %+v", got)
+	}
+}
+
+func TestSyncAlias_RewritesStaleSidecarWithoutManifestEntry(t *testing.T) {
+	dir := t.TempDir()
+	// Sidecar has stale target (points at fire), but adminList says it now
+	// aliases flame. The rewrite path must trigger.
+	if err := os.WriteFile(filepath.Join(dir, "campfire.alias"), []byte("fire\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := &emojiManifest{Emojis: map[string]emojiManifestEntry{}}
+	stats := &emojiDownloadStats{}
+	e := emojiAdminEntry{Name: "campfire", Type: "alias", AliasFor: "flame"}
+
+	syncAlias(e, dir, manifest, false, stats)
+
+	if stats.Aliases != 1 {
+		t.Errorf("Aliases = %d, want 1 (stale rewrite)", stats.Aliases)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "campfire.alias"))
+	if string(data) != "flame\n" {
+		t.Errorf("sidecar = %q, want %q", string(data), "flame\n")
+	}
+}
+
 func TestParseAdminListPage_RealShape(t *testing.T) {
 	// JSON shaped like the real emoji.adminList response.
 	raw := []byte(`{

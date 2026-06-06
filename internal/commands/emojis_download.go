@@ -158,8 +158,9 @@ func runEmojisDownload(cmd *cobra.Command, args []string) error {
 }
 
 // syncOneEmoji writes the image (or alias sidecar) and updates the manifest entry.
-// If the file is already on disk and the manifest has an entry, it's skipped
-// unless overwrite is set.
+// If the local file already exists, the download is skipped and the manifest
+// entry is (re)populated — so a directory full of images from a pre-manifest
+// run gets adopted on the next sync without re-downloading anything.
 func syncOneEmoji(client *api.Client, e emojiAdminEntry, dir string, manifest *emojiManifest, overwrite bool, stats *emojiDownloadStats) {
 	if e.Type == "alias" {
 		syncAlias(e, dir, manifest, overwrite, stats)
@@ -176,15 +177,13 @@ func syncOneEmoji(client *api.Client, e emojiAdminEntry, dir string, manifest *e
 	localName := sanitizeFilename(e.Name) + ext
 	dest := filepath.Join(dir, localName)
 
-	prevEntry, hadEntry := manifest.Emojis[e.Name]
-	_, statErr := os.Stat(dest)
-	fileExists := statErr == nil
-
-	if !overwrite && hadEntry && fileExists && prevEntry.Type == "custom" {
-		stats.Skipped++
-		// Refresh metadata in case adminList values changed.
-		manifest.Emojis[e.Name] = manifestEntryFor(e, localName)
-		return
+	if !overwrite {
+		if _, err := os.Stat(dest); err == nil {
+			stats.Skipped++
+			// Backfill / refresh the manifest entry with adminList metadata.
+			manifest.Emojis[e.Name] = manifestEntryFor(e, localName)
+			return
+		}
 	}
 
 	if err := client.DownloadFile(e.URL, dest); err != nil {
@@ -196,9 +195,9 @@ func syncOneEmoji(client *api.Client, e emojiAdminEntry, dir string, manifest *e
 	manifest.Emojis[e.Name] = manifestEntryFor(e, localName)
 }
 
-// syncAlias writes the alias sidecar file and updates the manifest. Sidecars
-// are cheap to rewrite so we don't bother with skip logic, except to count
-// re-writes as skips so the summary line reflects "nothing new".
+// syncAlias writes the alias sidecar file and updates the manifest. If the
+// sidecar already exists with the right target, the write is skipped.
+// Re-points (sidecar exists but contains a stale target) trigger a rewrite.
 func syncAlias(e emojiAdminEntry, dir string, manifest *emojiManifest, overwrite bool, stats *emojiDownloadStats) {
 	if e.AliasFor == "" {
 		fmt.Fprintf(os.Stderr, "warning: alias %s has no target, skipping\n", e.Name)
@@ -208,16 +207,14 @@ func syncAlias(e emojiAdminEntry, dir string, manifest *emojiManifest, overwrite
 	localName := sanitizeFilename(e.Name) + ".alias"
 	path := filepath.Join(dir, localName)
 
-	prevEntry, hadEntry := manifest.Emojis[e.Name]
-	_, statErr := os.Stat(path)
-	fileExists := statErr == nil
-
-	sameTarget := hadEntry && prevEntry.Type == "alias" && prevEntry.AliasFor == e.AliasFor
-
-	if !overwrite && sameTarget && fileExists {
-		stats.Skipped++
-		manifest.Emojis[e.Name] = manifestEntryFor(e, localName)
-		return
+	if !overwrite {
+		if existing, err := os.ReadFile(path); err == nil {
+			if strings.TrimSpace(string(existing)) == e.AliasFor {
+				stats.Skipped++
+				manifest.Emojis[e.Name] = manifestEntryFor(e, localName)
+				return
+			}
+		}
 	}
 
 	if err := os.WriteFile(path, []byte(e.AliasFor+"\n"), 0o644); err != nil {
