@@ -19,16 +19,18 @@ var canvasesCmd = &cobra.Command{
 	Short: "View Slack canvases",
 }
 
-// canvasesReadCmd fetches and displays Slack canvas content by ID.
+// canvasesReadCmd fetches and displays Slack canvas content by ID or URL.
 var canvasesReadCmd = &cobra.Command{
-	Use:   "read <canvas-id>",
+	Use:   "read <canvas-id-or-url>",
 	Short: "Fetch and display a Slack canvas",
 	Args: exactlyOneArg(
-		"a canvas ID",
-		"slack-cli canvases read <canvas-id>",
+		"a canvas ID or Slack URL",
+		"slack-cli canvases read <canvas-id-or-url>",
 		"slack-cli canvases read F12345678",
+		"slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'",
 	),
 	Example: `  slack-cli canvases read F12345678
+  slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'
   slack-cli canvases read F12345678 -o json`,
 	RunE: runCanvasesRead,
 }
@@ -38,10 +40,10 @@ func init() {
 	rootCmd.AddCommand(canvasesCmd)
 }
 
-// runCanvasesRead fetches a canvas document by ID and renders it as plain text
-// (table output) or the full document structure (JSON output).
+// runCanvasesRead fetches a canvas document by ID or URL and renders it as
+// plain text (table output) or the full document structure (JSON output).
 func runCanvasesRead(cmd *cobra.Command, args []string) error {
-	canvasID := args[0]
+	canvasID := parseFileOrCanvasID(args[0])
 
 	format := output.Resolve(cmd)
 
