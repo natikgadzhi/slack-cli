@@ -62,6 +62,7 @@ func init() {
 	channelsGetCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelsGetCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 	channelsGetCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
+	channelsGetCmd.Flags().Bool("with-pins", false, "Fetch and display pinned items and bookmarks")
 	channelsGetCmd.Flags().Bool("download-files", false, "Download file attachments to disk")
 	channelsGetCmd.Flags().String("download-dir", "slack-files", "Directory for downloaded files")
 
@@ -70,6 +71,7 @@ func init() {
 	channelCmd.Flags().String("until", "", "End time (e.g. 2026-03-10)")
 	channelCmd.Flags().IntP("limit", "n", 50, "Maximum number of messages to fetch")
 	channelCmd.Flags().Bool("with-replies", false, "Expand thread replies inline")
+	channelCmd.Flags().Bool("with-pins", false, "Fetch and display pinned items and bookmarks")
 	channelCmd.Flags().Bool("download-files", false, "Download file attachments to disk")
 	channelCmd.Flags().String("download-dir", "slack-files", "Directory for downloaded files")
 
@@ -141,6 +143,14 @@ func runChannel(cmd *cobra.Command, args []string) error {
 
 	// Start team URL fetch concurrently — it's independent of the message fetch.
 	teamCh := fetchTeamURLAsync(client)
+
+	// If --with-pins is set, start fetching pins and bookmarks concurrently.
+	withPins, _ := cmd.Flags().GetBool("with-pins")
+	var pinsCh, bookmarksCh <-chan pinsResult
+	if withPins {
+		pinsCh = fetchPinsAsync(client, channelID)
+		bookmarksCh = fetchBookmarksAsync(client, channelID)
+	}
 
 	// Fetch messages with progress indicator.
 	prog := progress.NewCounter("Fetching messages", format)
@@ -228,19 +238,66 @@ func runChannel(cmd *cobra.Command, args []string) error {
 		downloadMessageFiles(client, formatted, dlDir)
 	}
 
+	// Collect pins and bookmarks if requested.
+	var pinnedItems []formatting.PinnedItem
+	var bookmarks []formatting.Bookmark
+	if withPins {
+		pinsResult := <-pinsCh
+		if pinsResult.err != nil {
+			if !output.IsJSON(format) {
+				fmt.Fprintf(os.Stderr, "warning: fetching pins: %v\n", pinsResult.err)
+			}
+		} else {
+			pinnedItems = pinsResult.pins
+			// Resolve user IDs in pinned item creators.
+			for i := range pinnedItems {
+				if pinnedItems[i].CreatedBy != "" {
+					pinnedItems[i].CreatedBy = resolver.DisplayName(pinnedItems[i].CreatedBy)
+				}
+			}
+		}
+
+		bmResult := <-bookmarksCh
+		if bmResult.err != nil {
+			if !output.IsJSON(format) {
+				fmt.Fprintf(os.Stderr, "warning: fetching bookmarks: %v\n", bmResult.err)
+			}
+		} else {
+			bookmarks = bmResult.bookmarks
+		}
+	}
+
 	if output.IsJSON(format) {
-		if isPartial {
-			pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
-			if err := output.PrintJSON(pr); err != nil {
+		if withPins && (len(pinnedItems) > 0 || len(bookmarks) > 0) {
+			// Wrap in ChannelMetadata when pins/bookmarks are present.
+			meta := formatting.ChannelMetadata{
+				PinnedItems: pinnedItems,
+				Bookmarks:   bookmarks,
+				Messages:    formatted,
+			}
+			if isPartial {
+				meta.Warning = "rate limited: results may be incomplete"
+			}
+			if err := output.PrintJSON(meta); err != nil {
 				return err
 			}
 		} else {
-			if err := output.PrintJSON(formatted); err != nil {
-				return err
+			if isPartial {
+				pr := clierrors.NewPartialResult(formatted, "rate limited: results may be incomplete")
+				if err := output.PrintJSON(pr); err != nil {
+					return err
+				}
+			} else {
+				if err := output.PrintJSON(formatted); err != nil {
+					return err
+				}
 			}
 		}
 	} else {
-		// Table output: use table format for terminal.
+		// Table output: print pins/bookmarks header, then messages.
+		if withPins {
+			renderPinsHeader(pinnedItems, bookmarks)
+		}
 		renderMessagesTable(formatted)
 	}
 
@@ -353,4 +410,86 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen-3]) + "..."
+}
+
+// --- Pins and bookmarks helpers ---
+
+// pinsResult holds the result of a concurrent pins or bookmarks fetch.
+type pinsResult struct {
+	pins      []formatting.PinnedItem
+	bookmarks []formatting.Bookmark
+	err       error
+}
+
+// fetchPinsAsync starts a goroutine to fetch pinned items for a channel.
+func fetchPinsAsync(client *api.Client, channelID string) <-chan pinsResult {
+	ch := make(chan pinsResult, 1)
+	go func() {
+		result, err := client.Call("pins.list", map[string]string{
+			"channel": channelID,
+		})
+		if err != nil {
+			ch <- pinsResult{err: err}
+			return
+		}
+		rawItems := api.ExtractItems(result, "items")
+		pins := make([]formatting.PinnedItem, 0, len(rawItems))
+		for _, raw := range rawItems {
+			pins = append(pins, formatting.FormatPinnedItem(raw))
+		}
+		ch <- pinsResult{pins: pins}
+	}()
+	return ch
+}
+
+// fetchBookmarksAsync starts a goroutine to fetch bookmarks for a channel.
+func fetchBookmarksAsync(client *api.Client, channelID string) <-chan pinsResult {
+	ch := make(chan pinsResult, 1)
+	go func() {
+		result, err := client.Call("bookmarks.list", map[string]string{
+			"channel_id": channelID,
+		})
+		if err != nil {
+			ch <- pinsResult{err: err}
+			return
+		}
+		rawBookmarks := api.ExtractItems(result, "bookmarks")
+		bms := make([]formatting.Bookmark, 0, len(rawBookmarks))
+		for _, raw := range rawBookmarks {
+			bms = append(bms, formatting.FormatBookmark(raw))
+		}
+		ch <- pinsResult{bookmarks: bms}
+	}()
+	return ch
+}
+
+// renderPinsHeader prints a header section with pinned items and bookmarks
+// before the messages table.
+func renderPinsHeader(pins []formatting.PinnedItem, bookmarks []formatting.Bookmark) {
+	if len(pins) == 0 && len(bookmarks) == 0 {
+		return
+	}
+
+	for _, pin := range pins {
+		text := formatting.PinnedItemDisplayText(pin)
+		by := ""
+		if pin.CreatedBy != "" {
+			by = " by " + pin.CreatedBy
+		}
+		_, _ = fmt.Fprintf(os.Stdout, "\xf0\x9f\x93\x8c Pinned: %s%s\n", text, by)
+	}
+
+	for _, bm := range bookmarks {
+		label := bm.Title
+		if label == "" {
+			label = "(untitled)"
+		}
+		link := ""
+		if bm.Link != "" {
+			link = " (" + bm.Link + ")"
+		}
+		_, _ = fmt.Fprintf(os.Stdout, "\xf0\x9f\x94\x96 Tab: %s%s\n", label, link)
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout)
 }
