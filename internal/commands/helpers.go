@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -403,6 +404,37 @@ func exactlyOneArg(noun, usage string, examples ...string) cobra.PositionalArgs 
 }
 
 // --- Shared input-parsing helpers ---
+
+// parseFileOrCanvasID extracts a file/canvas ID from a Slack URL or returns
+// the input as-is if it doesn't look like a URL.
+//
+// Supported URL formats:
+//
+//	https://<team>.slack.com/files/<user-id>/<file-id>/<filename>
+//	https://<team>.slack.com/files/<user-id>/<file-id>
+//	https://<team>.slack.com/docs/<team-id>/<canvas-id>
+//	https://app.slack.com/docs/<team-id>/<canvas-id>
+//
+// The file/canvas ID is the path segment that starts with "F".
+func parseFileOrCanvasID(input string) string {
+	if !strings.HasPrefix(input, "http") {
+		return input
+	}
+
+	parsed, err := url.Parse(input)
+	if err != nil {
+		return input
+	}
+
+	// Walk path segments and find one starting with "F".
+	for _, seg := range strings.Split(parsed.Path, "/") {
+		if seg != "" && strings.HasPrefix(seg, "F") {
+			return seg
+		}
+	}
+
+	return input
+}
 
 // parseMessageInput resolves a channel ID and message timestamp from either a
 // positional URL argument or --channel/--ts flags. This is the shared input

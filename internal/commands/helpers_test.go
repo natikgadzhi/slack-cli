@@ -306,6 +306,69 @@ func TestExtractStringSlice_MixedTypes(t *testing.T) {
 	}
 }
 
+func TestParseFileOrCanvasID(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "raw file ID passthrough",
+			input: "F12345678",
+			want:  "F12345678",
+		},
+		{
+			name:  "file URL with filename",
+			input: "https://team.slack.com/files/U123/F456/report.txt",
+			want:  "F456",
+		},
+		{
+			name:  "file URL without filename",
+			input: "https://team.slack.com/files/U123/F789ABC",
+			want:  "F789ABC",
+		},
+		{
+			name:  "canvas URL",
+			input: "https://team.slack.com/docs/T123/F456",
+			want:  "F456",
+		},
+		{
+			name:  "app canvas URL",
+			input: "https://app.slack.com/docs/T123/F456",
+			want:  "F456",
+		},
+		{
+			name:  "URL without F-prefixed segment",
+			input: "https://team.slack.com/some/other/path",
+			want:  "https://team.slack.com/some/other/path",
+		},
+		{
+			name:  "non-URL string",
+			input: "not-a-url-at-all",
+			want:  "not-a-url-at-all",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "file URL with longer file ID",
+			input: "https://myteam.slack.com/files/U08SXCU6F/F08TN123ABC/design-spec.pdf",
+			want:  "F08TN123ABC",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseFileOrCanvasID(tc.input)
+			if got != tc.want {
+				t.Errorf("parseFileOrCanvasID(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExactlyOneArg_ZeroArgs(t *testing.T) {
 	validator := exactlyOneArg(
 		"a channel name or ID",

@@ -96,8 +96,10 @@ slack-cli channels list
 slack-cli channels members general
 slack-cli channels search eng
 slack-cli canvases read F12345678
+slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'
 slack-cli emojis search fire
 slack-cli files read F12345678
+slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'
 slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
 slack-cli search "deployment failed" --limit 10
 slack-cli saved --limit 50
@@ -166,11 +168,17 @@ slack-cli users search "product manager"
 # Read a text file inline (code snippets, configs, logs)
 slack-cli files read F12345678
 
+# Paste a file URL directly — the file ID is extracted automatically
+slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'
+
 # Download a file to disk
 slack-cli files read F12345678 --download --download-dir ./downloads
 
 # Read a Slack canvas document
 slack-cli canvases read F12345678
+
+# Or paste the canvas URL
+slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'
 ```
 
 ### Reactions and emojis
@@ -403,14 +411,17 @@ slack-cli channels search infra --include-archived
 
 ### `canvases read`
 
-Fetch and display a Slack canvas (document) by its ID.
+Fetch and display a Slack canvas (document) by its ID or URL.
 
 ```sh
 slack-cli canvases read F12345678
+slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'
+slack-cli canvases read 'https://app.slack.com/docs/T123/F12345678'
 slack-cli canvases read F12345678 -o json
 ```
 
-Canvas IDs start with `F` and can be found in canvas URLs or via the Slack API.
+Accepts a raw canvas ID (starting with `F`) or a Slack canvas URL -- the ID is
+extracted automatically.
 In table/text output the canvas content is rendered as simplified markdown
 (headings, paragraphs, lists, code blocks, blockquotes, links, checklists). In
 JSON output the full API response is returned, including the raw document
@@ -437,10 +448,13 @@ Table output columns: NAME (with colons for copy-paste, e.g. `:fire:`), TYPE
 
 ### `files read`
 
-Fetch a Slack file's metadata and, for text files, its content.
+Fetch a Slack file's metadata and, for text files, its content. Accepts a raw
+file ID (starting with `F`) or a Slack file URL -- the ID is extracted
+automatically.
 
 ```sh
 slack-cli files read F12345678
+slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'
 slack-cli files read F12345678 -o json
 slack-cli files read F12345678 --download
 slack-cli files read F12345678 --download --download-dir ./my-files

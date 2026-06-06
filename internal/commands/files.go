@@ -35,16 +35,18 @@ var filesCmd = &cobra.Command{
 	Short: "Manage Slack files",
 }
 
-// filesReadCmd fetches a Slack file's metadata and content by file ID.
+// filesReadCmd fetches a Slack file's metadata and content by file ID or URL.
 var filesReadCmd = &cobra.Command{
-	Use:   "read <file-id>",
+	Use:   "read <file-id-or-url>",
 	Short: "Read a Slack file's metadata and content",
 	Args: exactlyOneArg(
-		"a file ID",
-		"slack-cli files read <file-id>",
+		"a file ID or Slack URL",
+		"slack-cli files read <file-id-or-url>",
 		"slack-cli files read F12345678",
+		"slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'",
 	),
 	Example: `  slack-cli files read F12345678
+  slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'
   slack-cli files read F12345678 -o json
   slack-cli files read F12345678 --download
   slack-cli files read F12345678 --download --download-dir ./my-files`,
@@ -157,9 +159,9 @@ func formatSize(size int) string {
 	return fmt.Sprintf("%.1f GB", float64(size)/(1024*1024*1024))
 }
 
-// runFilesRead fetches a Slack file by ID and displays its metadata and content.
+// runFilesRead fetches a Slack file by ID or URL and displays its metadata and content.
 func runFilesRead(cmd *cobra.Command, args []string) error {
-	fileID := args[0]
+	fileID := parseFileOrCanvasID(args[0])
 
 	format := output.Resolve(cmd)
 
