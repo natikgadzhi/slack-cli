@@ -97,7 +97,10 @@ slack-cli channels members general
 slack-cli channels search eng
 slack-cli canvases read F12345678
 slack-cli canvases read 'https://yourteam.slack.com/docs/T123/F12345678'
+slack-cli emojis list
 slack-cli emojis search fire
+slack-cli emojis new
+slack-cli emojis download --download-dir ./wiki/img
 slack-cli files read F12345678
 slack-cli files read 'https://yourteam.slack.com/files/U123/F12345678/report.txt'
 slack-cli reactions get 'https://yourteam.slack.com/archives/C12345/p1741234567123456'
@@ -190,6 +193,15 @@ slack-cli reactions get --channel general --ts 1741234567.123456
 
 # Find custom workspace emojis
 slack-cli emojis search party
+
+# List every custom emoji in the workspace
+slack-cli emojis list -o json
+
+# Watch which emojis your team added since the last run
+slack-cli emojis new
+
+# Download every custom emoji image (great for building an emoji wiki)
+slack-cli emojis download --download-dir ./wiki/img
 ```
 
 ### Pipe and script
@@ -453,7 +465,80 @@ slack-cli emojis search logo -o json
 Table output columns: NAME (with colons for copy-paste, e.g. `:fire:`), TYPE
 (`custom` or `alias`), VALUE (image URL for custom emojis, target name like
 `:flames:` for aliases). JSON output returns an array of objects with `name`,
-`type`, and `value` fields.
+`type`, `value`, and `url` (the underlying image URL — for aliases this is
+resolved to the target's URL, so wiki tooling can render either the alias
+display name or the underlying image).
+
+### `emojis list`
+
+List every custom emoji in the workspace.
+
+```sh
+slack-cli emojis list
+slack-cli emojis list --limit 1000
+slack-cli emojis list --type custom
+slack-cli emojis list --type alias -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-n`, `--limit` | `500` | Maximum number of results |
+| `--type` | `all` | Filter by type: `custom`, `alias`, or `all` |
+
+Output shape matches `emojis search` (NAME / TYPE / VALUE in table, JSON array
+of objects with `name`, `type`, `value`, `url`). Results are sorted by name.
+
+### `emojis new`
+
+List emojis added since the last `emojis new` run. slack-cli persists a
+snapshot of the workspace's emoji set under the data directory
+(`<data-dir>/emojis/snapshot.json`); each invocation compares the live emoji
+set against the snapshot, prints what's new, then updates the snapshot.
+
+```sh
+slack-cli emojis new                # since last run
+slack-cli emojis new --since 7d     # only emojis first seen in the last 7 days
+slack-cli emojis new --reset        # replace snapshot with the current set
+slack-cli emojis new -o json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--since` | | Only show emojis first seen at or after this time (e.g. `7d`, `2026-03-01`) |
+| `--reset` | `false` | Replace the snapshot with the current emoji set and print nothing |
+| `-n`, `--limit` | `0` | Maximum emojis to print (`0` = no limit) |
+
+The first invocation establishes the baseline and reports zero new emojis.
+Subsequent runs print emojis that weren't in the previous snapshot (or, with
+`--since`, emojis whose first-seen timestamp lies within the window). The
+snapshot is updated whether or not anything new was found, so re-runs don't
+double-report.
+
+### `emojis download`
+
+Download custom emoji images to disk. Default behavior is to sync every custom
+emoji in the workspace into the target directory; pass a positional name to
+download a single one. Files already on disk are skipped unless `--overwrite`
+is set. Aliases get a sidecar `<name>.alias` text file containing the target
+name, rather than duplicating the underlying image.
+
+```sh
+slack-cli emojis download
+slack-cli emojis download --download-dir ./wiki/img
+slack-cli emojis download fire
+slack-cli emojis download :fire:
+slack-cli emojis download --overwrite
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--download-dir` | `slack-emojis` | Directory for downloaded files |
+| `--overwrite` | `false` | Re-download files that already exist on disk |
+
+Filenames are `<name>.<ext>` with the extension derived from the image URL
+(typically `.png` or `.gif`, falling back to `.png` if unknown). On completion
+a summary line is printed to stderr: `Done. N downloaded, M aliases, K
+skipped, E errors.`
 
 ### `files read`
 
