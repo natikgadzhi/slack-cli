@@ -516,29 +516,84 @@ double-report.
 
 ### `emojis download`
 
-Download custom emoji images to disk. Default behavior is to sync every custom
-emoji in the workspace into the target directory; pass a positional name to
-download a single one. Files already on disk are skipped unless `--overwrite`
-is set. Aliases get a sidecar `<name>.alias` text file containing the target
-name, rather than duplicating the underlying image.
+Sync custom emoji images to a local directory, with full creator + creation-time
+metadata captured in a manifest. Downloads are **incremental** — on every run
+slack-cli loads the existing `manifest.json` and only fetches emojis it hasn't
+seen before (or whose image is missing on disk). Pass `--overwrite` to re-fetch
+everything.
 
 ```sh
-slack-cli emojis download
+slack-cli emojis download                                  # incremental sync of all custom emojis
 slack-cli emojis download --download-dir ./wiki/img
-slack-cli emojis download fire
+slack-cli emojis download fire                             # one emoji
 slack-cli emojis download :fire:
-slack-cli emojis download --overwrite
+slack-cli emojis download --overwrite                      # re-fetch everything
+slack-cli emojis download --keep-removed                   # don't prune deleted emojis
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--download-dir` | `slack-emojis` | Directory for downloaded files |
 | `--overwrite` | `false` | Re-download files that already exist on disk |
+| `--keep-removed` | `false` | Keep manifest entries for emojis that no longer exist in the workspace |
 
-Filenames are `<name>.<ext>` with the extension derived from the image URL
-(typically `.png` or `.gif`, falling back to `.png` if unknown). On completion
-a summary line is printed to stderr: `Done. N downloaded, M aliases, K
-skipped, E errors.`
+**Files written**
+
+```
+<download-dir>/
+  manifest.json        # catalog of every emoji (see schema below)
+  fire.png             # custom emoji image (extension derived from URL)
+  party_blob.gif
+  campfire.alias       # one-line text file containing "fire"
+```
+
+Aliases get a `<name>.alias` text file (one line containing the target name)
+instead of duplicating the underlying image. Image filename extensions come
+from the source URL (`.png`, `.gif`, `.jpg`, `.jpeg`, `.webp`, `.apng`),
+falling back to `.png` for unknown types.
+
+**Manifest schema**
+
+```jsonc
+{
+  "version": 1,
+  "updated_at": "2026-06-06T19:42:11Z",
+  "emojis": {
+    "fire": {
+      "type": "custom",
+      "url": "https://emoji.slack-edge.com/.../fire.png",
+      "local_path": "fire.png",
+      "created_at": "2021-03-12T15:42:00Z",
+      "created_by_id": "U12345678",
+      "created_by_name": "Alice Adams"
+    },
+    "campfire": {
+      "type": "alias",
+      "alias_for": "fire",
+      "local_path": "campfire.alias",
+      "created_at": "2022-07-04T12:00:00Z",
+      "created_by_id": "U87654321",
+      "created_by_name": "Bob Bobson"
+    }
+  }
+}
+```
+
+Metadata is sourced from Slack's internal `emoji.adminList` endpoint, which
+requires the same browser session credentials slack-cli already uses. Syncing
+a large workspace (thousands of emojis) takes a few seconds — slack-cli
+paginates 200 emojis per request and respects Slack's rate limits.
+
+**Prune semantics**
+
+By default, emojis that have been removed from the workspace are dropped from
+the manifest and their local files are deleted, so the manifest stays a true
+mirror of the current emoji set. Pass `--keep-removed` to retain entries (the
+local file is preserved too) — useful when a wiki has historical links you
+don't want to break.
+
+A summary line is printed to stderr:
+`Done. N downloaded, M aliases, K skipped, R removed, E errors.`
 
 ### `files read`
 
