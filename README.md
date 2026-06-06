@@ -334,6 +334,7 @@ Fetch messages from a Slack channel by name or ID.
 slack-cli channels get general --since 2d --limit 100
 slack-cli channels get C12345678 --since 2026-03-01 --until 2026-03-10
 slack-cli channels get general --with-replies
+slack-cli channels get general --with-pins
 slack-cli channels get general -o json
 ```
 
@@ -343,6 +344,7 @@ slack-cli channels get general -o json
 | `--until` | | End time |
 | `-n`, `--limit` | `50` | Maximum number of messages to fetch |
 | `--with-replies` | `false` | Expand thread replies inline under each parent message |
+| `--with-pins` | `false` | Fetch and display pinned items and bookmarks |
 | `--download-files` | `false` | Download file attachments to disk |
 | `--download-dir` | `slack-files` | Directory for downloaded files |
 
@@ -355,6 +357,13 @@ as an OSC-8 hyperlink to the message permalink, so it stays clickable in a
 capable terminal without the URL being truncated. Use `-o json` to get the raw
 permalink. When `--with-replies` is set, thread replies appear after their parent
 with a `↳` prefix in table output and nested under `"replies"` in JSON.
+
+When `--with-pins` is set, pinned items and bookmarks (tabs) are fetched via
+`pins.list` and `bookmarks.list` and shown as a header section before the
+messages in table output. In JSON output, the response becomes an object with
+`pinned_items`, `bookmarks`, and `messages` fields instead of a flat message
+array. When `--with-pins` is not set (the default), the output format is
+unchanged.
 
 ### `channels list`
 
