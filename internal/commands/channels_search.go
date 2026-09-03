@@ -61,6 +61,7 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 
 	var matched []map[string]any
 	var isPartial bool
+	var partialReason string
 	var scanned int
 	pageSize := 200
 	pages := 0
@@ -83,6 +84,7 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 
 			// On rate limit with partial data, warn and render what we have.
 			if _, ok := api.AsRateLimitError(err); ok && len(matched) > 0 {
+				partialReason = "rate limited"
 				clierrors.PrintWarning(fmt.Sprintf("rate limited after searching %d channels; showing partial results", len(matched)), output.IsJSON(format))
 				isPartial = true
 				break
@@ -92,6 +94,15 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 			if cliErr, ok := api.AsCLIError(err); ok {
 				clierrors.PrintError(cliErr, output.IsJSON(format))
 				os.Exit(cliErr.ExitCode)
+			}
+
+			// Any other failure (timeout, connection reset, decode error):
+			// don't discard matches already found on earlier pages.
+			if len(matched) > 0 {
+				partialReason = "search failed"
+				clierrors.PrintWarning(fmt.Sprintf("searching channels failed after %d matches (%s); showing partial results", len(matched), err), output.IsJSON(format))
+				isPartial = true
+				break
 			}
 			return fmt.Errorf("searching channels: %w", err)
 		}
@@ -154,7 +165,7 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 	// Render output.
 	if output.IsJSON(format) {
 		if isPartial {
-			pr := clierrors.NewPartialResult(results, "rate limited: results may be incomplete")
+			pr := clierrors.NewPartialResult(results, partialReason+": results may be incomplete")
 			if err := output.PrintJSON(pr); err != nil {
 				return err
 			}
@@ -169,7 +180,7 @@ func runChannelsSearch(cmd *cobra.Command, args []string) error {
 
 	if !output.IsJSON(format) {
 		if isPartial {
-			fmt.Fprintf(os.Stderr, "Done. %d channels found (partial — rate limited).\n", len(results))
+			fmt.Fprintf(os.Stderr, "Done. %d channels found (partial — %s).\n", len(results), partialReason)
 		} else {
 			fmt.Fprintf(os.Stderr, "Done. %d channels found.\n", len(results))
 		}
